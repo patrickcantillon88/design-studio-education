@@ -348,6 +348,9 @@
     box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.14), 0 1px 2px rgba(0, 0, 0, 0.06);
     position: relative;
     overflow: hidden;
+    /* Punch the toolbar icons a touch — slightly higher contrast and a
+       lower gamma so the small thumbnails read clearly against the panel. */
+    filter: contrast(1.12) brightness(0.94) saturate(1.06);
   }
   .tool .tool-thumb {
     width: 48px;
@@ -356,6 +359,7 @@
     pointer-events: none;
     /* Crisp pixel-accurate downsample for the WebGL bitmap. */
     image-rendering: -webkit-optimize-contrast;
+    filter: contrast(1.12) brightness(0.94) saturate(1.06);
   }
   .tool .swatch.eraser {
     background: repeating-linear-gradient(45deg, #e8e3d6, #e8e3d6 3px, #d6cdb8 3px, #d6cdb8 6px) !important;
@@ -689,9 +693,23 @@
   }
   .welcome-actions {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
     gap: 10px;
     margin-top: 4px;
+  }
+  .welcome-dontshow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+  }
+  .welcome-dontshow input[type="checkbox"] {
+    margin: 0;
+    accent-color: #8a6f3a;
   }
   @media (max-width: 600px) {
     .welcome-tips { grid-template-columns: 1fr; }
@@ -1219,7 +1237,7 @@
     </form>
   </div>
 
-  <div id="welcome-modal" class="modal">
+  <div id="welcome-modal" class="modal" hidden>
     <form class="modal-card welcome-card" role="dialog" aria-labelledby="welcome-title" onsubmit="return false">
       <div class="modal-head">
         <strong id="welcome-title" class="welcome-title">Tiny World <em>Builder</em></strong>
@@ -1232,6 +1250,10 @@
         <div class="welcome-tip"><strong>Keep going</strong>Use Reset, Clear, Export, Import, and Render from the top bar.</div>
       </div>
       <div class="welcome-actions">
+        <label class="welcome-dontshow">
+          <input type="checkbox" id="welcome-dontshow" />
+          <span>Don't show this again</span>
+        </label>
         <button class="btn" id="welcome-start" type="button">Start building</button>
       </div>
     </form>
@@ -4019,6 +4041,40 @@
     return new THREE.Vector3(x - GRID / 2 + 0.5, 0, z - GRID / 2 + 0.5);
   }
 
+  // -------- home board border --------
+  // A subtle outline around the editable GRID x GRID home board so the
+  // user can tell at a glance where their board ends and the ghost
+  // boards begin. Rebuilt whenever GRID changes.
+  const homeBorderGroup = new THREE.Group();
+  homeBorderGroup.name = 'homeBorder';
+  scene.add(homeBorderGroup);
+  const HOME_BORDER_COLOR = 0x2a1a0e;
+  const HOME_BORDER_Y = 0.04;
+  const homeBorderStripMat = new THREE.MeshBasicMaterial({ color: HOME_BORDER_COLOR });
+  const STRIP_WIDTH = 0.12;       // how thick the line reads on the ground
+  const STRIP_Y = 0.03;            // slightly above ground to beat z-fighting
+  function addStrip(x, z, len, axis) {
+    const w = axis === 'x' ? len + STRIP_WIDTH : STRIP_WIDTH;
+    const d = axis === 'z' ? len + STRIP_WIDTH : STRIP_WIDTH;
+    const geom = new THREE.PlaneGeometry(w, d);
+    const strip = new THREE.Mesh(geom, homeBorderStripMat);
+    strip.rotation.x = -Math.PI / 2;
+    strip.position.set(x, STRIP_Y, z);
+    homeBorderGroup.add(strip);
+  }
+  function buildHomeBorder() {
+    while (homeBorderGroup.children.length) {
+      const c = homeBorderGroup.children.pop();
+      if (c.geometry) c.geometry.dispose();
+    }
+    const half = GRID / 2;
+    addStrip(0, -half, GRID, 'x'); // north
+    addStrip(0,  half, GRID, 'x'); // south
+    addStrip(-half, 0, GRID, 'z'); // west
+    addStrip( half, 0, GRID, 'z'); // east
+  }
+  buildHomeBorder();
+
   // -------- ghost worlds --------
   // Non-editable neighbouring boards. They preview the multiplayer shape of
   // the world without changing the central board's world/cellMeshes contract.
@@ -4158,28 +4214,11 @@
     return x < 0 || x >= GRID || z < 0 || z >= GRID;
   }
 
-  function desaturateMaterial(mat) {
-    if (!mat || !mat.color) return;
-    if (mat.userData && mat.userData.grayscaled) return;
-    const c = mat.color;
-    const lum = c.r * 0.299 + c.g * 0.587 + c.b * 0.114;
-    const mix = 0.85;
-    c.setRGB(
-      c.r * (1 - mix) + lum * mix,
-      c.g * (1 - mix) + lum * mix,
-      c.b * (1 - mix) + lum * mix
-    );
-    if (mat.emissive) {
-      const e = mat.emissive;
-      const elum = e.r * 0.299 + e.g * 0.587 + e.b * 0.114;
-      e.setRGB(
-        e.r * (1 - mix) + elum * mix,
-        e.g * (1 - mix) + elum * mix,
-        e.b * (1 - mix) + elum * mix
-      );
-    }
-    if (!mat.userData) mat.userData = {};
-    mat.userData.grayscaled = true;
+  // Grayscale has been disabled — ghost / out-of-bounds tiles render in
+  // their full color. Function kept as a no-op so existing call sites still
+  // work without changes.
+  function desaturateMaterial(_mat) {
+    return;
   }
 
   // -------- fade material cache --------
@@ -4290,24 +4329,57 @@
   }
 
   function setElementOpacity(root, opacity, immediate = false) {
+    const prevTarget = root.userData.targetOpacity;
     root.userData.targetOpacity = opacity;
     opacityRoots.add(root);
     if (root.userData.currentOpacity === undefined || immediate) {
       root.userData.currentOpacity = opacity;
+      root.userData.revealDelay = 0;
       applyElementOpacity(root, opacity);
+      return;
+    }
+    // First time this root is asked to reveal — assign a small random
+    // delay so neighbouring pieces stagger in rather than popping as a
+    // single block.
+    if (!immediate && opacity > 0 && (prevTarget === undefined || prevTarget <= 0) && (root.userData.currentOpacity || 0) <= 0) {
+      root.userData.revealDelay = Math.random() * 0.55;
     }
   }
 
   function tickOpacityTransitions(dt) {
     if (!opacityRoots.size) return;
-    const step = 1 - Math.exp(-dt * 14);
+    // Slower ramp than the snap version — gives the world a noticeable
+    // "painting in" feel as the camera explores.
+    const step = 1 - Math.exp(-dt * 5);
     for (const root of opacityRoots) {
       const targetOpacity = root.userData.targetOpacity;
       if (targetOpacity === undefined) continue;
       const current = root.userData.currentOpacity === undefined ? targetOpacity : root.userData.currentOpacity;
+
+      // Stagger: hold the cell at 0 until its random reveal delay
+      // counts down.
+      if ((root.userData.revealDelay || 0) > 0 && targetOpacity > current) {
+        root.userData.revealDelay = Math.max(0, root.userData.revealDelay - dt);
+        applyElementOpacity(root, current);
+        if (!root.userData.landing) {
+          const s = 0.6 + 0.4 * current;
+          if (Math.abs(root.scale.x - s) > 0.001) root.scale.setScalar(s);
+        }
+        continue;
+      }
+
       const next = current + (targetOpacity - current) * step;
       root.userData.currentOpacity = Math.abs(next - targetOpacity) < 0.003 ? targetOpacity : next;
       applyElementOpacity(root, root.userData.currentOpacity);
+
+      // Jigsaw pop: scale follows opacity from 0.6 to 1 so newly revealed
+      // pieces visibly punch into place. Skip while the drop-in animator
+      // owns the transform.
+      if (!root.userData.landing) {
+        const t = root.userData.currentOpacity;
+        const s = 0.6 + 0.4 * t;
+        if (Math.abs(root.scale.x - s) > 0.001) root.scale.setScalar(s);
+      }
     }
   }
 
@@ -4322,23 +4394,31 @@
     return t * t * (3 - 2 * t);
   }
 
+  // Visibility model:
+  //  - The home GRID x GRID board is always fully rendered.
+  //  - Outside the home board, cells are revealed once they enter the
+  //    visible square around the camera target — and stay revealed
+  //    afterwards (the user keeps the breadcrumb trail behind them).
+  //    Reveal stickiness is tracked on each root's userData.revealed by
+  //    revealOpacityFor() below; this raw function only answers the
+  //    "is it currently in the visible window?" question.
   function opacityAtWorldPosition(x, z) {
-    const centerHalf = GRID / 2;
+    const homeHalf = GRID / 2;
+    if (Math.abs(x) <= homeHalf && Math.abs(z) <= homeHalf) return 1;
     const visibleHalf = renderVisibleSize / 2;
     const dist = Math.max(Math.abs(x - target.x), Math.abs(z - target.z));
-    if (dist > visibleHalf) return 0;
-    if (dist <= centerHalf) return 1;
+    return dist <= visibleHalf ? 1 : 0;
+  }
 
-    const featherDist = dist - centerHalf;
-    if (renderGhostOpacity >= 0.995) {
-      return 1;
-    }
-    const featherWidth = Math.min(VIEW_EDGE_FADE_TILES, Math.max(0.001, visibleHalf - centerHalf));
-    if (featherDist <= featherWidth) {
-      const t = smoothstep(featherDist / featherWidth);
-      return 1 - (1 - renderGhostOpacity) * t;
-    }
-    return renderGhostOpacity;
+  // Sticky reveal: once a non-home root has been seen, it stays at full
+  // opacity for the rest of the session. Returns 1 if home, sticky, or
+  // currently inside the visible window; otherwise 0.
+  function revealOpacityFor(root) {
+    if (!root) return 0;
+    if (root.userData.revealed) return 1;
+    const op = opacityAtWorldPosition(root.position.x, root.position.z);
+    if (op > 0) root.userData.revealed = true;
+    return op;
   }
 
   function makeGhostObject(cells, x, z) {
@@ -4439,7 +4519,7 @@
       board.visible = boardDist <= ghostPreloadRadius;
       if (!board.visible) continue;
       for (const child of board.children) {
-        const op = opacityAtWorldPosition(child.position.x, child.position.z);
+        const op = revealOpacityFor(child);
         setElementOpacity(child, op);
         if (op > 0.05) anyUnsavedVisible = true;
       }
@@ -4451,7 +4531,7 @@
         const entry = cellMeshes[key];
         const root = entry.object || entry.tile;
         if (!root) continue;
-        if (opacityAtWorldPosition(root.position.x, root.position.z) > 0.05) {
+        if (revealOpacityFor(root) > 0.05) {
           anyUnsavedVisible = true;
           break;
         }
@@ -4489,12 +4569,14 @@
 
   function updateHomeBoardFade() {
     for (const key in cellMeshes) {
+      const [kx, kz] = key.split(',').map(Number);
+      const insideHome = !isOutsideHomeGrid(kx, kz);
       const entry = cellMeshes[key];
       if (entry.tile) {
-        setElementOpacity(entry.tile, opacityAtWorldPosition(entry.tile.position.x, entry.tile.position.z));
+        setElementOpacity(entry.tile, insideHome ? 1 : revealOpacityFor(entry.tile));
       }
       if (entry.object) {
-        setElementOpacity(entry.object, opacityAtWorldPosition(entry.object.position.x, entry.object.position.z));
+        setElementOpacity(entry.object, insideHome ? 1 : revealOpacityFor(entry.object));
       }
     }
   }
@@ -6673,6 +6755,7 @@
     GRID = n;
     try { localStorage.setItem('tinyworld:home-grid', String(GRID)); } catch (_) {}
     updateUnsavedCopyForGrid();
+    if (typeof buildHomeBorder === 'function') buildHomeBorder();
 
     // Drop every ghost board — their world positions are anchored to GRID.
     for (const [key, board] of ghostBoards) {
@@ -8636,12 +8719,35 @@
   }
 
   // -------- welcome dialog --------
+  // Bump WELCOME_NOTICE_ID when the welcome content has a genuinely new
+  // announcement worth re-showing to previously-dismissed users.
+  const WELCOME_NOTICE_ID = '2026-05-11-jigsaw';
+  const WELCOME_LS_KEY = 'tinyworld:welcome:dismissedId';
   function initWelcomeDialog() {
     const modal = document.getElementById('welcome-modal');
     const closeBtn = document.getElementById('welcome-close');
     const startBtn = document.getElementById('welcome-start');
+    const dontShow = document.getElementById('welcome-dontshow');
     if (!modal) return;
-    function close() { modal.hidden = true; }
+
+    let dismissedId = null;
+    try { dismissedId = localStorage.getItem(WELCOME_LS_KEY); } catch (_) {}
+    // Only show when the current notice hasn't been dismissed yet.
+    if (dismissedId !== WELCOME_NOTICE_ID) {
+      modal.hidden = false;
+    }
+
+    function close() {
+      modal.hidden = true;
+      try {
+        if (dontShow && dontShow.checked) {
+          localStorage.setItem(WELCOME_LS_KEY, WELCOME_NOTICE_ID);
+        } else {
+          // Unticked → user might want to see it next reload too.
+          localStorage.removeItem(WELCOME_LS_KEY);
+        }
+      } catch (_) {}
+    }
     closeBtn.addEventListener('click', close);
     startBtn.addEventListener('click', close);
     modal.addEventListener('click', e => {
@@ -8870,17 +8976,36 @@
   }
 
   // -------- auth --------
+  // Local dev bypass: on localhost / file:// / ?dev, skip the auth library
+  // entirely and run the existing "no auth library" branch so settings,
+  // AI generate, and cloud features are all unlocked.
+  function __isLocalDev() {
+    try {
+      const u = new URL(location.href);
+      if (u.searchParams.has('dev')) return true;
+      if (location.protocol === 'file:') return true;
+      const h = location.hostname;
+      return h === 'localhost' || h === '127.0.0.1' || h === '0.0.0.0' || h.endsWith('.local');
+    } catch (_) { return false; }
+  }
   function initAuth() {
-    const Auth = window.NetlifyAuth;
+    const Auth = __isLocalDev() ? null : window.NetlifyAuth;
     if (!Auth) {
       // No auth library — single-user local mode. Hide all auth UI
       // and treat the user as logged in so settings/AI aren't
       // permanently locked.
       window.__loggedIn = true;
-      const ids = ['auth-login-btn-top', 'auth-logout-btn', 'account-btn', 'generate'];
-      for (const id of ids) {
+      // Hide sign-in/out/account UI; unhide AI generate; clear locked badge.
+      for (const id of ['auth-login-btn-top', 'auth-logout-btn', 'account-btn']) {
         const el = document.getElementById(id);
-        if (el && (id === 'auth-login-btn-top' || id === 'auth-logout-btn' || id === 'account-btn')) el.hidden = true;
+        if (el) el.hidden = true;
+      }
+      const genBtn = document.getElementById('generate');
+      if (genBtn) genBtn.hidden = false;
+      const settingsBtn = document.getElementById('render-settings');
+      if (settingsBtn) {
+        settingsBtn.classList.remove('locked');
+        settingsBtn.setAttribute('data-tooltip', 'Render settings');
       }
       bootApp();
       return;
