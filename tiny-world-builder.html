@@ -1801,9 +1801,10 @@
   body.tod-dusk  #tod-tint { opacity: 1; background: linear-gradient(180deg, rgba(255, 140, 90, 0.24), transparent 55%); }
   body.tod-night #tod-tint { opacity: 1; background: linear-gradient(180deg, rgba(10, 30, 70, 0.36), rgba(10, 30, 70, 0.1) 60%, transparent); }
 
-  /* Night / dusk UI adaptation — keep icons dark/black, but bump the
-     translucent glass surfaces toward opaque so the dark glyphs stay
-     legible against the dark scene behind them. */
+  /* Night / dusk UI adaptation — solid off-white chrome so dark icons
+     stay legible. Backdrop-filter is dropped because over a near-black
+     scene a low-alpha background + blur reads as transparent — instead
+     we paint a fully opaque pill. */
   body.tod-night .toolbar,
   body.tod-dusk  .toolbar,
   body.tod-night .controls,
@@ -1826,35 +1827,68 @@
   body.tod-dusk  .world-menu,
   body.tod-night .modal-card,
   body.tod-dusk  .modal-card {
-    background: rgba(248, 250, 254, 0.92) !important;
-    border-color: rgba(255, 255, 255, 0.75) !important;
+    background-color: #f3f5f9 !important;
+    background-image: none !important;
+    border-color: rgba(120, 130, 150, 0.35) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
     box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.95) inset,
-      0 -1px 0 rgba(120, 130, 150, 0.10) inset,
-      0 1px 2px rgba(0, 0, 0, 0.22),
-      0 18px 48px -14px rgba(0, 0, 0, 0.55) !important;
-    backdrop-filter: blur(22px) saturate(160%) !important;
-    -webkit-backdrop-filter: blur(22px) saturate(160%) !important;
+      0 1px 0 rgba(255, 255, 255, 0.85) inset,
+      0 1px 2px rgba(0, 0, 0, 0.25),
+      0 20px 48px -14px rgba(0, 0, 0, 0.6) !important;
   }
   body.tod-night .brand .title,
   body.tod-dusk  .brand .title {
-    color: #fff;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+    color: #f0f4ff !important;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
   }
   body.tod-night .brand .sub,
   body.tod-dusk  .brand .sub {
-    color: rgba(245, 248, 255, 0.78);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    color: rgba(225, 232, 245, 0.85) !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
   }
-  /* Buttons on those surfaces — keep ink-coloured icons (i.e. dark) so
-     they stand out against the now-light pill. Don't recolour them. */
+  /* Force ALL chrome icons + button surfaces to use dark ink colour so
+     they stand out on the now-bright pills. Override hover/active that
+     normally tints the icon. */
   body.tod-night .btn.icon,
   body.tod-dusk  .btn.icon,
   body.tod-night .toolbar .tool,
   body.tod-dusk  .toolbar .tool,
   body.tod-night .toolbar .tool-group-btn,
-  body.tod-dusk  .toolbar .tool-group-btn {
-    color: var(--ink);
+  body.tod-dusk  .toolbar .tool-group-btn,
+  body.tod-night .agent-grip,
+  body.tod-dusk  .agent-grip,
+  body.tod-night .agent-input input,
+  body.tod-dusk  .agent-input input,
+  body.tod-night .modal-card,
+  body.tod-dusk  .modal-card {
+    color: var(--ink) !important;
+  }
+  /* Slider chrome inside settings — keep the rail readable too. */
+  body.tod-night .modal-card input[type="range"]::-webkit-slider-runnable-track,
+  body.tod-dusk  .modal-card input[type="range"]::-webkit-slider-runnable-track,
+  body.tod-night .settings-panel input[type="range"]::-webkit-slider-runnable-track,
+  body.tod-dusk  .settings-panel input[type="range"]::-webkit-slider-runnable-track {
+    background: rgba(20, 30, 50, 0.18);
+  }
+  /* Popup label / value text — these inherit var(--muted) which becomes
+     ghost-faint against the now-opaque white card. Push to dark ink. */
+  body.tod-night .topbar-popup,
+  body.tod-dusk  .topbar-popup,
+  body.tod-night .topbar-popup-title,
+  body.tod-dusk  .topbar-popup-title,
+  body.tod-night .time-row-label,
+  body.tod-dusk  .time-row-label,
+  body.tod-night .time-row-val,
+  body.tod-dusk  .time-row-val,
+  body.tod-night .topbar-popup .pill,
+  body.tod-dusk  .topbar-popup .pill {
+    color: var(--ink) !important;
+  }
+  /* Agent input placeholder readable on the bright night chrome. */
+  body.tod-night .agent-input input::placeholder,
+  body.tod-dusk  .agent-input input::placeholder {
+    color: rgba(60, 60, 70, 0.55) !important;
   }
   body.weather-rain  #tod-tint { background-image:
     linear-gradient(180deg, rgba(80,110,140,0.2), transparent 60%),
