@@ -5,9 +5,12 @@
 ## Run
 
 ```bash
+npm run dev
+# serves http://localhost:3000/tiny-world-builder
+# use another port with: npm run dev -- 3001
+
+# or open directly
 open tiny-world-builder.html
-# or serve it
-python3 -m http.server 8000
 ```
 
 ## Deploy
