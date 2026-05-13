@@ -37,43 +37,31 @@ deferred. Each landed item is a separate commit on this branch.
 |   |                                     |          | palette entries; clamped    |
 |   |                                     |          | 1..8 on `terrainFloors`     |
 
-## Deferred (intentional)
+## Items 4, 5, 6 — second pass
 
-| # | Item                                | Reason                       |
-| - | ----------------------------------- | ---------------------------- |
-| 4 | Port map / terrain generation       | OWB's `generate.js` +        |
-|   |                                     | `terrain.js` operate on a    |
-|   |                                     | 192+ instanced grid with     |
-|   |                                     | biome maps; wholesale port   |
-|   |                                     | would replace tinyworld's    |
-|   |                                     | 8×8 render pipeline.  The AI |
-|   |                                     | generate panel (item 13) now |
-|   |                                     | exposes the same conceptual  |
-|   |                                     | surface (biome %, elevation  |
-|   |                                     | %, seed) within tinyworld's  |
-|   |                                     | existing pipeline.           |
-| 5 | Performance optimisations / vsync   | TinyWorld already has its    |
-|   |                                     | own 60fps render-settings    |
-|   |                                     | (resolution scale, shadow    |
-|   |                                     | quality, smoothing, visible  |
-|   |                                     | distance) and frame loop.    |
-|   |                                     | OWB's instanced renderer +   |
-|   |                                     | dirty-region passes are      |
-|   |                                     | tightly coupled to its       |
-|   |                                     | engine and not portable.     |
-| 6 | New objects (plants / animals)      | Tinyworld already supports   |
-|   |                                     | tree / tuft / rock / bridge /|
-|   |                                     | crop / corn / wheat /        |
-|   |                                     | pumpkin / carrot / sunflower.|
-|   |                                     | New kinds (animals, more     |
-|   |                                     | plant species) require new   |
-|   |                                     | renderer geometry, which is  |
-|   |                                     | a larger change than this    |
-|   |                                     | port should touch.  The      |
-|   |                                     | richer kind list from OWB    |
-|   |                                     | can be layered on later by   |
-|   |                                     | adding to TOOLS + writing    |
-|   |                                     | the corresponding factory.   |
+All three originally-deferred items now ship as additive code on this
+branch:
+
+| # | Item                                | Status   | Where                       |
+| - | ----------------------------------- | -------- | --------------------------- |
+| 4 | Map / terrain generation            | ✅ shipped| `generateProceduralWorld()` |
+|   |                                     |          | emits v=4 cells directly    |
+|   |                                     |          | from seed + biome % +       |
+|   |                                     |          | elevation %.  "Procedural   |
+|   |                                     |          | (offline)" toggle in the    |
+|   |                                     |          | generate panel bypasses the |
+|   |                                     |          | LLM entirely.               |
+| 5 | Performance optimisations           | ✅ shipped| Page Visibility pause in    |
+|   |                                     |          | animate(); low-fps DPR      |
+|   |                                     |          | backoff (28ms threshold →   |
+|   |                                     |          | 0.15 step down, restores    |
+|   |                                     |          | when avg frame ≤ 19ms).     |
+| 6 | New objects (plants / animals)      | ✅ shipped| Adds 4 new kinds:           |
+|   |                                     |          | flower / bush / cow / sheep |
+|   |                                     |          | wired through every         |
+|   |                                     |          | dispatch site, the schema,  |
+|   |                                     |          | and TOOLS (new 'Animals'    |
+|   |                                     |          | group).                     |
 
 ## Architecture honoured
 
