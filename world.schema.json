@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://tinyworld.local/world.schema.json",
   "title": "TinyWorld",
-  "description": "Scene description for the Tiny World Builder. Renders an 8x8 grid of cells, each with a terrain (always set), an optional object 'kind', a stack count for objects, an optional forced buildingType variant for houses, and an optional fenceSide for fences. Defaults: terrain='grass', kind=null, floors=1, buildingType=null, fenceSide=null. Only emit cells that differ from the defaults — the renderer fills the rest with grass.",
+  "description": "Scene description for the Tiny World Builder. The renderer supports home grids from 8x8 to 48x48, plus sparse user-edited ghost-board cells outside the home grid. Each non-default cell has a terrain, optional object kind, separate object floors and terrainFloors counts, optional house buildingType, optional fenceSide, optional decorative extras, and optional within-tile transform.",
   "type": "object",
   "additionalProperties": false,
   "required": ["v", "cells"],
@@ -12,15 +12,20 @@
       "enum": [4],
       "description": "Schema version. Must be 4."
     },
+    "gridSize": {
+      "type": "integer",
+      "enum": [8, 12, 16, 20, 32, 48],
+      "description": "Optional home board edge length. Defaults to the current app grid when omitted."
+    },
     "cells": {
       "type": "array",
-      "description": "Sparse list of non-default cells on the 8x8 grid (x in 0..7, z in 0..7). Each (x,z) must appear at most once.",
+      "description": "Sparse list of non-default cells. The app exports compact tuple cells but also accepts object cells for AI/tooling convenience. Coordinates may include user-edited ghost-board cells outside the home grid.",
       "items": { "$ref": "#/$defs/cell" }
     },
     "cameraMode": {
       "type": "string",
-      "enum": ["ortho", "perspective"],
-      "description": "Optional preferred camera. Defaults to current camera if omitted."
+      "enum": ["ortho", "topdown", "soft", "perspective", "fp"],
+      "description": "Optional preferred camera. Saved worlds usually use ortho, soft, perspective, or fp; topdown is accepted for imports."
     },
     "toolId": {
       "type": "string",
@@ -28,28 +33,82 @@
     }
   },
   "$defs": {
-    "cell": {
+    "coord": { "type": "integer", "minimum": -96, "maximum": 96 },
+    "terrain": {
+      "type": "string",
+      "enum": ["grass", "path", "dirt", "water", "stone", "lava", "sand", "snow"],
+      "description": "Tile material. Water and lava normally clear hosted kinds except bridge/rock handling in the renderer. Dirt is auto-applied under crops. Stone/snow read as mountain caps; sand as a water-edge beach."
+    },
+    "kind": {
+      "type": ["string", "null"],
+      "enum": [null, "house", "tree", "fence", "rock", "bridge", "crop", "corn", "wheat", "pumpkin", "carrot", "sunflower", "tuft", "flower", "bush", "cow", "sheep"]
+    },
+    "buildingType": {
+      "type": ["string", "null"],
+      "enum": [null, "cottage", "manor", "tower", "turret", "skyscraper"]
+    },
+    "fenceSide": {
+      "type": ["string", "null"],
+      "enum": [null, "n", "s", "e", "w", "center-x", "center-z"]
+    },
+    "extra": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "enum": ["fence", "tuft"] },
+        "k": { "type": "string", "enum": ["fence", "tuft"] },
+        "fenceSide": { "$ref": "#/$defs/fenceSide" },
+        "s": { "$ref": "#/$defs/fenceSide" },
+        "floors": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "f": { "type": "integer", "minimum": 1, "maximum": 8 }
+      },
+      "anyOf": [
+        { "required": ["kind"] },
+        { "required": ["k"] }
+      ]
+    },
+    "extras": {
+      "type": ["array", "null"],
+      "items": { "$ref": "#/$defs/extra" }
+    },
+    "transform": {
+      "oneOf": [
+        {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "prefixItems": [
+            { "type": "number", "description": "rotationY in radians" },
+            { "type": "number", "description": "offsetX in tile units" },
+            { "type": "number", "description": "offsetZ in tile units" }
+          ],
+          "items": false
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "rotationY": { "type": "number" },
+            "offsetX": { "type": "number" },
+            "offsetZ": { "type": "number" }
+          }
+        }
+      ]
+    },
+    "cellObject": {
       "type": "object",
       "additionalProperties": false,
       "required": ["x", "z", "terrain", "kind", "floors", "terrainFloors", "buildingType", "fenceSide"],
       "properties": {
-        "x": { "type": "integer", "minimum": 0, "maximum": 7 },
-        "z": { "type": "integer", "minimum": 0, "maximum": 7 },
-        "terrain": {
-          "type": "string",
-          "enum": ["grass", "path", "dirt", "water", "stone", "lava", "sand", "snow"],
-          "description": "Tile material. 'water' should not host kinds (no kinds float). 'dirt' is auto-applied under crops by the renderer; you may set it explicitly."
-        },
-        "kind": {
-          "type": ["string", "null"],
-          "enum": [null, "house", "tree", "fence", "rock", "bridge", "crop", "corn", "wheat", "pumpkin", "carrot", "sunflower", "tuft", "flower", "bush", "cow", "sheep"],
-          "description": "Object placed on the cell, or null for none. House uses 'floors' and optional 'buildingType'. Fence uses 'fenceSide' to render a single side/leaf on one tile edge or centre line. Fences on perpendicular sides of a house can promote it to a castle turret and the connected fence component to a stone wall. Rock is a low-poly landmark prop. Bridge is the only kind that may sit on water and auto-orients toward nearby path/land. Crop-type kinds (crop/corn/wheat/pumpkin/carrot/sunflower) imply terrain='dirt'."
-        },
+        "x": { "$ref": "#/$defs/coord" },
+        "z": { "$ref": "#/$defs/coord" },
+        "terrain": { "$ref": "#/$defs/terrain" },
+        "kind": { "$ref": "#/$defs/kind" },
         "floors": {
           "type": "integer",
           "minimum": 1,
           "maximum": 8,
-          "description": "Object stack/intensity count. For houses it means floors: cottages plateau visually at 3; high-rises need 4+; manors read best at 1-3; towers at 2-6. For non-house props/crops it is enhancement density from repeat taps (1=normal, higher=larger/denser/more detailed). It must not be used to raise the ground."
+          "description": "Object stack/intensity count. For houses it means floors; for non-house props/crops it is enhancement density from repeat taps. It must not be used to raise the ground."
         },
         "terrainFloors": {
           "type": "integer",
@@ -57,17 +116,35 @@
           "maximum": 8,
           "description": "Ground height stack for the terrain layer only. Terrain repeat taps raise this value. Object repeat taps raise floors instead."
         },
-        "buildingType": {
-          "type": ["string", "null"],
-          "enum": [null, "cottage", "manor", "tower", "turret", "skyscraper"],
-          "description": "Forces a single-cell house variant. Only meaningful when kind='house'. null = 'auto': cluster logic merges adjacent houses into linear/L/T/+/2x2 forms and auto-promotes solo 4+ floor houses to skyscrapers. cottage/manor/tower/turret/skyscraper bypass clustering — adjacent forced-variant houses stay independent."
-        },
-        "fenceSide": {
-          "type": ["string", "null"],
-          "enum": [null, "n", "s", "e", "w", "center-x", "center-z"],
-          "description": "For fences only. n/s/e/w place one fence leaf on that tile edge. center-x and center-z place a centre-line fence. null defaults to n for fence and is ignored for other kinds."
-        }
+        "buildingType": { "$ref": "#/$defs/buildingType" },
+        "fenceSide": { "$ref": "#/$defs/fenceSide" },
+        "extras": { "$ref": "#/$defs/extras" },
+        "transform": { "$ref": "#/$defs/transform" }
       }
+    },
+    "cellTuple": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 10,
+      "prefixItems": [
+        { "$ref": "#/$defs/coord", "description": "x" },
+        { "$ref": "#/$defs/coord", "description": "z" },
+        { "$ref": "#/$defs/terrain" },
+        { "$ref": "#/$defs/kind" },
+        { "type": "integer", "minimum": 1, "maximum": 8, "description": "floors" },
+        { "$ref": "#/$defs/buildingType" },
+        { "type": "integer", "minimum": 1, "maximum": 8, "description": "terrainFloors" },
+        { "$ref": "#/$defs/fenceSide" },
+        { "$ref": "#/$defs/extras" },
+        { "$ref": "#/$defs/transform" }
+      ],
+      "items": false
+    },
+    "cell": {
+      "oneOf": [
+        { "$ref": "#/$defs/cellObject" },
+        { "$ref": "#/$defs/cellTuple" }
+      ]
     }
   }
 }

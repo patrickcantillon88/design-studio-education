@@ -18,6 +18,7 @@ Core rules:
 
 Validation:
 
-- Run `perl -0ne 'print $1 if m#<script>\s*(.*?)\s*</script>#s' tiny-world-builder.html | node --check`.
+- Run `npm test` (syntax-checks the inline app script, parses `world.schema.json`, verifies embedded schema parity, and checks local script/link assets).
+- For targeted parser checks, run `perl -0ne 'print $1 if m#<script>\s*(.*?)\s*</script>#s' tiny-world-builder.html | node --check`.
 - Prefer browser validation at `http://localhost:3000/tiny-world-builder`.
 - Check console errors after visual/UI changes.

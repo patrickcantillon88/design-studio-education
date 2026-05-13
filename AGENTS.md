@@ -9,7 +9,7 @@ Guidance for AI coding agents working in this repo. Read this before touching
   single `<script>` block at the bottom. Three.js **r128** loaded from cdnjs.
 - No build, no bundler, no package manager, no tests. Edit the HTML, reload
   the browser. That's the whole loop.
-- `tiny-world-builder BACKUP.html` is a manual snapshot. Don't auto-update it.
+- If a `tiny-world-builder BACKUP.html` snapshot exists, don't auto-update it.
 
 ## Repo-local skills
 
@@ -35,8 +35,8 @@ Guidance for AI coding agents working in this repo. Read this before touching
 - Section comments are `// -------- name --------` and they matter — keep
   related code grouped under them. If you add a new system, give it its own
   section header.
-- Boring obvious code over clever. The whole app is ~1600 LoC; keep it that
-  way.
+- Boring obvious code over clever. The app is now feature-rich (~16k LoC), so
+  prefer small, well-sectioned changes over clever abstractions.
 
 ## Mental model
 
@@ -107,14 +107,14 @@ or you will desync intent from rendering.
 - Don't remove the `userData.landing` checks. They prevent animations from
   fighting the drop-in queue.
 - Don't "clean up" comments without asking.
-- Don't touch `tiny-world-builder BACKUP.html`.
+- Don't touch `tiny-world-builder BACKUP.html` if that local snapshot exists.
 
 ## Quick checks before declaring done
 
 - [ ] Page loads with no console errors.
 - [ ] Tool keyboard shortcuts (`1`–`9`, `E`) still work.
-- [ ] `R` resets to the preset village; `C` clears to grass with the
-      staggered drop-in.
+- [ ] `R` / `F` raise and lower the hovered terrain; reset button restores the
+      preset village; `C` clears to grass with the staggered drop-in.
 - [ ] Perspective ⇄ ortho still toggles cleanly.
 - [ ] Placing/erasing a fence updates its neighbors' geometry.
 - [ ] Clusters of houses still render as L/T/+/square where appropriate.

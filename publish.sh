@@ -21,6 +21,7 @@ Outputs:
   dist/README.md
   dist/LICENSE
   dist/assets/*                   Screenshots/assets
+  dist/cluso/*                    Optional Cluso annotation embed
   dist/sounds/*.mp3               Music + foley used by the app
   dist/.nojekyll                  GitHub Pages compatibility
   dist/VERSION.txt                Build metadata
@@ -42,15 +43,8 @@ if [[ ! -f tiny-world-builder.html ]]; then
 fi
 
 # Lightweight sanity checks before publishing.
-node <<'NODE'
-const fs = require('fs');
-const html = fs.readFileSync('tiny-world-builder.html', 'utf8');
-const match = html.match(/<script>([\s\S]*?)<\/script>\s*<\/body>/);
-if (!match) throw new Error('Could not find inline script in tiny-world-builder.html');
-new Function(match[1]);
-JSON.parse(fs.readFileSync('world.schema.json', 'utf8'));
-console.log('✓ publish checks passed');
-NODE
+node tools/check.js
+printf '✓ publish checks passed\n'
 
 rm -rf "$DIST"
 mkdir -p "$DIST/assets"
@@ -65,6 +59,17 @@ for img in tinyworld-*.png plane-*.jpg perf-after.jpg; do
   [[ -e "$img" ]] || continue
   cp "$img" "$DIST/assets/$img"
 done
+
+# Optional annotation embed referenced by cluso/<file> tags in the HTML.
+if [[ -d cluso ]]; then
+  mkdir -p "$DIST/cluso"
+  (cd cluso && find . -type f ! -name '.DS_Store' -exec sh -c '
+    for f do
+      mkdir -p "../dist/cluso/$(dirname "$f")"
+      cp "$f" "../dist/cluso/$f"
+    done
+  ' sh {} +)
+fi
 
 # Sounds — music + foley referenced by the app via sounds/<name>.mp3.
 # The page expects this exact directory at the deploy root.
