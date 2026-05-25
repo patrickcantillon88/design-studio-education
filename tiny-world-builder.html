@@ -6299,6 +6299,7 @@
     waterfall: new THREE.MeshBasicMaterial({ color: 0x78c9f4, transparent: true, opacity: 0.46, depthWrite: true, side: THREE.FrontSide }),
     waterfallHi: new THREE.MeshBasicMaterial({ color: 0xd8f6ff, transparent: true, opacity: 0.62, depthWrite: true, side: THREE.FrontSide }),
     waterfallFoamPuff: new THREE.MeshBasicMaterial({ color: 0xe8fbff, transparent: true, opacity: 0.58, depthWrite: true }),
+    waterfallCube: new THREE.MeshBasicMaterial({ color: 0x168ed0, transparent: true, opacity: 0.68, depthWrite: true }),
     shore:     new THREE.MeshLambertMaterial({ color: 0xd8c18a, side: THREE.FrontSide }),
 
     rock:      new THREE.MeshLambertMaterial({ color: 0x9b9a8f, side: THREE.FrontSide }),
@@ -8098,12 +8099,52 @@
     return getWaterfallPlaneGeometry.geo;
   }
 
+  function addSurfaceEdgeWeeds(g, terrain, x, z, terrainN, topSize, topY) {
+    if (terrain === 'grass' || terrain === 'water' || terrain === 'lava' || terrain === 'snow') return;
+    const dirs = [
+      { key: 'n', gx: 0, gz: -1 },
+      { key: 's', gx: 0, gz: 1 },
+      { key: 'w', gx: -1, gz: 0 },
+      { key: 'e', gx: 1, gz: 0 },
+    ];
+    for (const dir of dirs) {
+      if (!terrainN || terrainN[dir.key] !== 'grass') continue;
+      const count = 2 + Math.floor(cellRand(x + dir.gx, z + dir.gz, 1860) * 3);
+      for (let i = 0; i < count; i++) {
+        const r = cellRand(x * 17 + i + dir.gx, z * 19 - i + dir.gz, 1870);
+        const along = (r - 0.5) * topSize * 0.76;
+        const inset = 0.035 + cellRand(x - i, z + i, 1880) * 0.075;
+        const h = 0.055 + cellRand(x + i, z - i, 1890) * 0.090;
+        const w = 0.025 + cellRand(x - i * 2, z + i * 3, 1900) * 0.026;
+        let px = 0, pz = 0;
+        if (dir.key === 'n') { px = along; pz = -topSize * 0.5 + inset; }
+        if (dir.key === 's') { px = along; pz =  topSize * 0.5 - inset; }
+        if (dir.key === 'w') { px = -topSize * 0.5 + inset; pz = along; }
+        if (dir.key === 'e') { px =  topSize * 0.5 - inset; pz = along; }
+        const mat = (i % 3 === 0) ? M.grassHi : M.grassEdge;
+        vbox(g, w, h, w * 0.72, px, topY + h * 0.5 + 0.003, pz, mat, {
+          noGap: true,
+          noBevel: true,
+          ry: cellRand(x + i, z - i, 1910) * Math.PI,
+        });
+      }
+    }
+  }
+
   function getWaterfallFoamGeometry() {
     if (!getWaterfallFoamGeometry.geo) {
       getWaterfallFoamGeometry.geo = new THREE.DodecahedronGeometry(1, 0);
       getWaterfallFoamGeometry.geo.userData.cached = true;
     }
     return getWaterfallFoamGeometry.geo;
+  }
+
+  function getWaterfallCubeGeometry() {
+    if (!getWaterfallCubeGeometry.geo) {
+      getWaterfallCubeGeometry.geo = getBoxGeometry(1, 1, 1);
+      getWaterfallCubeGeometry.geo.userData.cached = true;
+    }
+    return getWaterfallCubeGeometry.geo;
   }
 
   function addWaterfallRiserEffects(g, x, z, riserSize, topY, sides) {
@@ -8207,6 +8248,37 @@
       g.add(mesh);
     }
 
+    function placeWaterCube(dir, across, y, size, salt) {
+      const mesh = new THREE.Mesh(getWaterfallCubeGeometry(), M.waterfallCube);
+      const baseScale = size * (0.82 + cellRand(x - salt, z + salt, 432) * 0.34);
+      const base = sidePosition(dir, across, y, 0.020 + cellRand(x + salt, z + salt, 433) * 0.035);
+      mesh.scale.set(baseScale * 1.08, baseScale * 0.88, baseScale);
+      mesh.userData.noShadow = true;
+      mesh.userData.waterfall = {
+        kind: 'cube',
+        dir,
+        baseX: base.x,
+        baseY: base.y,
+        baseZ: base.z,
+        baseAcross: across,
+        baseScale,
+        phase: cellRand(x * 47 + salt, z * 53 - salt, 534),
+        speed: 1.00 + cellRand(x - salt, z + salt, 535) * 0.82,
+        drift: 0.045 + cellRand(x + salt, z + salt, 536) * 0.072,
+        acrossDrift: sideSpan * (0.045 + cellRand(x - salt, z - salt, 537) * 0.10),
+        fallHeight: height * (0.86 + cellRand(x + salt, z - salt, 538) * 0.44),
+      };
+      mesh.renderOrder = 6;
+      mesh.rotation.set(
+        cellRand(x + salt, z, 541) * Math.PI,
+        cellRand(x, z + salt, 542) * Math.PI,
+        cellRand(x - salt, z - salt, 543) * Math.PI,
+      );
+      mesh.position.set(base.x, base.y, base.z);
+      waterfallEffectMeshes.add(mesh);
+      g.add(mesh);
+    }
+
     function addSide(dir) {
       const seed = dir.charCodeAt(0);
       const curtainBottomY = -DIRT_H - Math.max(1.8, GRID * 0.16);
@@ -8240,6 +8312,13 @@
           ? 0.070 + cellRand(x + i, z + i, 590 + seed) * 0.045
           : 0.040 + cellRand(x - i, z + i, 600 + seed) * 0.045;
         placeFoamPuff(dir, across, y, radius, seed + i * 17, lane);
+      }
+      for (let i = 0; i < 9; i++) {
+        const r = cellRand(x * 59 + i, z * 61 - i, 744 + seed);
+        const across = (-0.38 + i / 8 * 0.76 + (r - 0.5) * 0.11) * sideSpan;
+        const y = topY - height * (0.22 + cellRand(x + i * 5, z + i * 7, 746 + seed) * 0.78);
+        const size = 0.055 + cellRand(x - i, z + i, 748 + seed) * 0.080;
+        placeWaterCube(dir, across, y, size, seed + i * 31);
       }
     }
 
@@ -8301,6 +8380,25 @@
         const merge = 1 + Math.max(0, wave) * 0.62 + Math.max(0, burst) * 0.26;
         const s = cfg.baseScale * merge;
         mesh.scale.set(s * (1.12 + wobble * 0.28), s * (0.72 + burst * 0.22), s * (1.04 - wobble * 0.18));
+        continue;
+      }
+      if (cfg.kind === 'cube') {
+        const wave = Math.sin((t * cfg.speed + cfg.phase) * Math.PI * 2);
+        const wobble = Math.cos((t * (cfg.speed * 1.31) + cfg.phase * 0.7) * Math.PI * 2);
+        const across = cfg.baseAcross + wobble * cfg.acrossDrift;
+        if (Math.abs(cfg.baseX) > Math.abs(cfg.baseZ)) {
+          mesh.position.x = cfg.baseX + wave * cfg.drift * 0.45;
+          mesh.position.z = across;
+        } else {
+          mesh.position.x = across;
+          mesh.position.z = cfg.baseZ + wave * cfg.drift * 0.45;
+        }
+        mesh.position.y = cfg.baseY - flow * cfg.fallHeight + Math.max(0, wave) * cfg.drift;
+        if (mesh.position.y < -DIRT_H - 0.25) mesh.position.y += cfg.fallHeight;
+        mesh.rotation.x += 0.55 * cfg.speed * 0.016;
+        mesh.rotation.y += 0.42 * cfg.speed * 0.016;
+        const s = cfg.baseScale * (0.88 + Math.max(0, wave) * 0.32);
+        mesh.scale.set(s * 1.06, s * 0.86, s);
         continue;
       }
       mesh.position.y = cfg.baseY - (flow - 0.5) * cfg.drift;
@@ -8482,6 +8580,7 @@
         }
       }
       addHeavyTerrainKerbStrips(g, terrain, x, z, terrainN, topSize, topY);
+      addSurfaceEdgeWeeds(g, terrain, x, z, terrainN, topSize, topY);
       if (terrain === 'water') {
         addWaterfallRiserEffects(g, x, z, riserSize, topY - 0.018, {
           e: !skipE && (typeof levelN.e !== 'number' || levelN.e < level),
@@ -11142,12 +11241,19 @@
   }
 
   function voxelInvertedSteppedRoof(parent, width, depth, topY, roofMat = M.islandUnder, trimMat = M.islandUnderD) {
+    const layers = Math.max(7, Math.min(14, Math.round(Math.max(width, depth) * 0.65)));
     const totalDrop = Math.max(1.85, Math.min(6.2, Math.max(width, depth) * 0.30));
-    const geo = getOpenBoxGeometry(width, totalDrop, depth, true, false, false, false, false, false);
-    const mesh = new THREE.Mesh(geo, roofMat);
-    mesh.position.y = topY - totalDrop * 0.5;
-    mesh.userData.noShadow = true;
-    parent.add(mesh);
+    const yStep = totalDrop / layers;
+    const layerH = yStep * 1.08;
+    for (let i = 0; i < layers; i++) {
+      const t = i / Math.max(1, layers - 1);
+      const w = Math.max(0.36, width * (1 - t * 0.78));
+      const d = Math.max(0.36, depth * (1 - t * 0.78));
+      const y = topY - i * yStep - layerH * 0.5;
+      const mat = i % 3 === 0 ? trimMat : roofMat;
+      vbox(parent, w, layerH, d, 0, y, 0, mat, { noGap: true, noBevel: true });
+    }
+    vbox(parent, Math.max(0.30, width * 0.10), layerH * 1.1, Math.max(0.30, depth * 0.10), 0, topY - totalDrop - layerH * 0.55, 0, trimMat, { noGap: true, noBevel: true });
   }
 
   function voxelChimney(parent, x, y, z, tops) {
@@ -14171,6 +14277,151 @@
     return !!(world[x] && world[x][z] && world[x][z].userEdited);
   }
 
+  // -------- distant world dressing --------
+  const distantWorldGroup = new THREE.Group();
+  distantWorldGroup.name = 'distant-worlds';
+  xrWorldRoot.add(distantWorldGroup);
+
+  function makeTinyCloudlet(seed) {
+    const g = new THREE.Group();
+    const count = 5 + Math.floor(cellRand(seed, GRID, 2320) * 4);
+    for (let i = 0; i < count; i++) {
+      const r = 0.16 + cellRand(seed + i, GRID, 2330) * 0.18;
+      const mat = cellRand(seed - i, GRID, 2340) < 0.68 ? M.cloud : M.cloudShade;
+      const m = new THREE.Mesh(getDodecahedronGeometry(r), mat);
+      m.position.set(
+        (cellRand(seed + i * 2, GRID, 2350) - 0.5) * 1.3,
+        cellRand(seed - i * 3, GRID, 2360) * 0.30,
+        (cellRand(seed + i * 5, GRID, 2370) - 0.5) * 0.9,
+      );
+      m.castShadow = false;
+      m.receiveShadow = false;
+      g.add(m);
+    }
+    return g;
+  }
+
+  function makeDistantMiniWorld(seed, variant) {
+    const g = new THREE.Group();
+    const span = 3.4 + cellRand(seed, GRID, 2400) * 0.8;
+    const depth = 2.8 + cellRand(seed, GRID, 2410) * 0.8;
+    vbox(g, span, 0.18, depth, 0, 0, 0, M.grass, { noGap: true, noBevel: true });
+    vbox(g, span * 0.98, 0.46, depth * 0.98, 0, -0.32, 0, M.dirtRich, { noGap: true, noBevel: true });
+    vbox(g, span * 0.92, 0.44, depth * 0.92, 0, -0.78, 0, M.boardSide, { noGap: true, noBevel: true });
+    vbox(g, span * 0.70, 0.34, depth * 0.70, 0, -1.17, 0, M.islandUnderD, { noGap: true, noBevel: true });
+
+    vbox(g, span * 0.68, 0.035, 0.22, 0, 0.115, 0, M.path, { noGap: true, noBevel: true });
+    vbox(g, 0.20, 0.035, depth * 0.56, 0.28, 0.118, 0, M.path, { noGap: true, noBevel: true });
+    if (variant % 3 === 0) {
+      const water = vbox(g, 0.34, 0.030, depth * 0.75, -0.72, 0.122, 0, M.water, { noGap: true, noBevel: true });
+      water.material = M.water;
+    }
+
+    const houseX = -0.55 + cellRand(seed, GRID, 2420) * 0.35;
+    const houseZ = -0.55 + cellRand(seed, GRID, 2430) * 0.30;
+    vbox(g, 0.42, 0.36, 0.38, houseX, 0.35, houseZ, variant % 2 ? M.wallCream : M.manorBrick, { noGap: true, noBevel: true });
+    vbox(g, 0.52, 0.12, 0.48, houseX, 0.59, houseZ, variant % 2 ? M.roofBlue : M.manorRoof, { noGap: true, noBevel: true });
+    vbox(g, 0.08, 0.16, 0.08, houseX + 0.14, 0.77, houseZ - 0.08, M.chimney, { noGap: true, noBevel: true });
+
+    const towerX = 0.68;
+    const towerZ = -0.35 + cellRand(seed, GRID, 2440) * 0.70;
+    vbox(g, 0.42, 0.72, 0.42, towerX, 0.53, towerZ, M.towerStone, { noGap: true, noBevel: true });
+    vbox(g, 0.58, 0.12, 0.58, towerX, 0.94, towerZ, M.towerStoneD, { noGap: true, noBevel: true });
+    for (let i = 0; i < 4; i++) {
+      const sx = towerX + (i < 2 ? -0.21 : 0.21);
+      const sz = towerZ + (i % 2 ? -0.21 : 0.21);
+      vbox(g, 0.12, 0.18, 0.12, sx, 1.09, sz, M.towerStone, { noGap: true, noBevel: true });
+    }
+
+    for (let i = 0; i < 7; i++) {
+      const px = (cellRand(seed + i, GRID, 2450) - 0.5) * span * 0.78;
+      const pz = (cellRand(seed - i, GRID, 2460) - 0.5) * depth * 0.78;
+      if (Math.abs(px) < 0.35 && Math.abs(pz) < 0.28) continue;
+      vbox(g, 0.10, 0.32, 0.10, px, 0.29, pz, M.trunk, { noGap: true, noBevel: true });
+      vbox(g, 0.36, 0.26, 0.36, px, 0.60, pz, M.leaves, { noGap: true, noBevel: true });
+      vbox(g, 0.24, 0.18, 0.24, px, 0.82, pz, M.leavesDk, { noGap: true, noBevel: true });
+    }
+
+    for (let i = 0; i < 10; i++) {
+      const edge = Math.floor(cellRand(seed + i, GRID, 2470) * 4);
+      const px = edge < 2 ? (cellRand(seed + i, GRID, 2480) - 0.5) * span : (edge === 2 ? -span * 0.53 : span * 0.53);
+      const pz = edge >= 2 ? (cellRand(seed - i, GRID, 2490) - 0.5) * depth : (edge === 0 ? -depth * 0.53 : depth * 0.53);
+      const s = 0.08 + cellRand(seed - i, GRID, 2500) * 0.08;
+      vbox(g, s, s, s, px, -0.18 - cellRand(seed + i, GRID, 2510) * 0.55, pz, cellRand(seed + i, GRID, 2520) < 0.45 ? M.grassEdge : M.boardSide, { noGap: true, noBevel: true });
+    }
+
+    const cloud = makeTinyCloudlet(seed + 313);
+    cloud.position.set(0.4, 2.0 + cellRand(seed, GRID, 2530) * 0.5, -0.9);
+    cloud.scale.set(0.72, 0.44, 0.58);
+    g.add(cloud);
+    g.traverse(o => { if (o.isMesh) o.raycast = function () {}; });
+    castReceive(g);
+    return g;
+  }
+
+  function buildDistantWorlds() {
+    if (!distantWorldGroup) return;
+    while (distantWorldGroup.children.length) {
+      const c = distantWorldGroup.children.pop();
+      distantWorldGroup.remove(c);
+      disposeGroup(c);
+    }
+    const placements = [
+      { x: -20, z: -15, y: -1.2, s: 0.44, r: 0.25 },
+      { x: 22, z: -13, y: -1.6, s: 0.36, r: -0.45 },
+      { x: -26, z: 14, y: -1.9, s: 0.31, r: 0.72 },
+      { x: 28, z: 18, y: -2.1, s: 0.28, r: -0.20 },
+    ];
+    placements.forEach((p, i) => {
+      const w = makeDistantMiniWorld(900 + i * 97, i);
+      w.position.set(p.x, p.y, p.z);
+      w.rotation.y = p.r;
+      w.scale.setScalar(p.s);
+      distantWorldGroup.add(w);
+    });
+  }
+
+  function addIslandEdgeDressing(parent) {
+    const span = GRID * TILE;
+    const half = span * 0.5;
+    const perEdge = Math.max(18, Math.min(56, GRID * 4));
+    function addEdge(dir) {
+      const alongX = dir === 'n' || dir === 's';
+      const sign = dir === 's' || dir === 'e' ? 1 : -1;
+      for (let i = 0; i < perEdge; i++) {
+        const t = (i + 0.5) / perEdge;
+        const along = -half + t * span + (cellRand(i, GRID, 2600 + dir.charCodeAt(0)) - 0.5) * 0.22;
+        const out = half + 0.030 + cellRand(i, GRID, 2610 + dir.charCodeAt(0)) * 0.050;
+        const px = alongX ? along : sign * out;
+        const pz = alongX ? sign * out : along;
+        const roll = cellRand(i, GRID, 2620 + dir.charCodeAt(0));
+        if (roll < 0.78) {
+          const w = 0.10 + cellRand(i, GRID, 2630 + dir.charCodeAt(0)) * 0.18;
+          const h = 0.06 + cellRand(i, GRID, 2640 + dir.charCodeAt(0)) * 0.10;
+          vbox(parent, alongX ? w : h, h, alongX ? h : w, px, -0.02 - h * 0.5, pz, roll < 0.42 ? M.grassEdge : M.grassHi, { noGap: true, noBevel: true });
+        }
+        if (roll > 0.30) {
+          const w = 0.12 + cellRand(i, GRID, 2650 + dir.charCodeAt(0)) * 0.22;
+          const h = 0.16 + cellRand(i, GRID, 2660 + dir.charCodeAt(0)) * 0.34;
+          const d = 0.10 + cellRand(i, GRID, 2670 + dir.charCodeAt(0)) * 0.16;
+          vbox(parent, alongX ? w : d, h, alongX ? d : w, px, -0.16 - h * 0.5, pz, roll < 0.62 ? M.dirtRich : M.boardSide, { noGap: true, noBevel: true });
+        }
+        if (roll > 0.72) {
+          const s = 0.11 + cellRand(i, GRID, 2680 + dir.charCodeAt(0)) * 0.18;
+          const drop = 0.62 + cellRand(i, GRID, 2690 + dir.charCodeAt(0)) * 1.25;
+          const inset = 0.05 + cellRand(i, GRID, 2700 + dir.charCodeAt(0)) * 0.22;
+          const dx = alongX ? (cellRand(i, GRID, 2710) - 0.5) * 0.12 : -sign * inset;
+          const dz = alongX ? -sign * inset : (cellRand(i, GRID, 2720) - 0.5) * 0.12;
+          vbox(parent, s, s, s, px + dx, -drop, pz + dz, cellRand(i, GRID, 2730) < 0.45 ? M.islandUnderD : M.boardSide, { noGap: true, noBevel: true });
+        }
+      }
+    }
+    addEdge('n');
+    addEdge('s');
+    addEdge('w');
+    addEdge('e');
+  }
+
   // -------- home board border --------
   // No visible board marker. The old dark rectangle/outline under the start
   // board read as an artifact in pixel mode.
@@ -14182,8 +14433,11 @@
       const c = homeBorderGroup.children.pop();
       safeDisposeGeometry(c.geometry);
     }
-    voxelInvertedSteppedRoof(homeBorderGroup, GRID * TILE * 0.94, GRID * TILE * 0.94, -DIRT_H - 0.020, M.islandUnder, M.islandUnderD);
+    vbox(homeBorderGroup, GRID * TILE, 0.10, GRID * TILE, 0, -DIRT_H - 0.055, 0, M.islandUnderD, { noGap: true, noBevel: true });
+    voxelInvertedSteppedRoof(homeBorderGroup, GRID * TILE, GRID * TILE, -DIRT_H - 0.020, M.islandUnder, M.islandUnderD);
+    addIslandEdgeDressing(homeBorderGroup);
     castReceive(homeBorderGroup);
+    buildDistantWorlds();
     if (typeof buildUnderIslandClouds === 'function') buildUnderIslandClouds();
   }
   buildHomeBorder();
@@ -21409,7 +21663,7 @@
   cloudGroup.name = 'clouds';
   xrWorldRoot.add(cloudGroup);
   var clouds = [];
-  var CLOUD_MAX = 18;
+  var CLOUD_MAX = 14;
   var CLOUD_RANGE_X = 24; // wrap-around x extent (centred on 0)
   var CLOUD_Z_RANGE = 18;
 
@@ -21485,22 +21739,22 @@
 
   function makeCloud() {
     const g = new THREE.Group();
-    // Ported from the better flight-sim-style cloud pass: 8–12 low-poly
-    // dodecahedron puffs with wide horizontal spread and mild vertical
-    // build-up. These read softer and more natural than the older slab
-    // stack while staying cheap at Tiny World's cloud counts.
-    const count = 8 + Math.floor(Math.random() * 5);
+    // Dense faceted puff clusters: chunky enough to read like low-poly
+    // clouds at distance without becoming flat wisps.
+    const count = 14 + Math.floor(Math.random() * 6);
     for (let i = 0; i < count; i++) {
-      const r = 0.25 + Math.random() * 0.35;
-      const bright = Math.random() < 0.6;
-      const opacity = bright ? (0.7 + Math.random() * 0.25) : (0.4 + Math.random() * 0.25);
+      const core = i < 5;
+      const r = core ? (0.42 + Math.random() * 0.34) : (0.22 + Math.random() * 0.36);
+      const bright = core || Math.random() < 0.66;
+      const opacity = bright ? (0.82 + Math.random() * 0.16) : (0.56 + Math.random() * 0.20);
       const mat = cloneCloudMat(bright ? M.cloud : M.cloudShade, opacity);
       const mesh = new THREE.Mesh(getDodecahedronGeometry(r), mat);
       mesh.position.set(
-        (Math.random() - 0.5) * 3.2,
-        Math.random() * 0.9,
-        (Math.random() - 0.5) * 2.2
+        (Math.random() - 0.5) * (core ? 1.4 : 3.5),
+        core ? (0.18 + Math.random() * 0.48) : Math.random() * 0.95,
+        (Math.random() - 0.5) * (core ? 1.0 : 2.3)
       );
+      mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
       g.add(mesh);
     }
     // Clouds cast shadows on the world below but don't catch shadows
@@ -21562,7 +21816,7 @@
   var CLOUD_Y_JITTER = 1.5;
   // Permanent flatten on the Y axis — clouds read more "stretched"
   // and sky-like than puffy at half height.
-  var CLOUD_FLATTEN = 0.5;
+  var CLOUD_FLATTEN = 0.62;
 
   function spawnCloud(initial) {
     const c = makeCloud();
