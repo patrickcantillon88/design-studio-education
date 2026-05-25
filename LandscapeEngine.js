@@ -16,8 +16,9 @@ class LandscapeEngine {
    * @param {string} [config.initialBiome='grassland'] - 'grassland', 'desert', or 'snow'
    * @param {string} [config.styleMode='realistic'] - 'realistic' or 'lowpoly'
    * @param {THREE.Color} [config.fogColorOut] - Color object updated with current fog color
+   * @param {Object|false} [config.airfield] - Optional runway/airfield terrain-carving configuration. Pass false to disable.
    */
-  constructor({ scene, seed = 8472, initialBiome = 'grassland', styleMode = 'realistic', fogColorOut = null }) {
+  constructor({ scene, seed = 8472, initialBiome = 'grassland', styleMode = 'realistic', fogColorOut = null, airfield = undefined }) {
     if (!THREE) {
       throw new Error('LandscapeEngine: Three.js (THREE) must be loaded first.');
     }
@@ -43,13 +44,15 @@ class LandscapeEngine {
     this.FAR_CHUNK_RES = 90;
     this.FAR_RADIUS = 4; // 9x9 far LOD grid
 
-    this.AIRFIELD_FLAT_RADIUS = 230;
+    this.airfield = this._makeAirfieldConfig(airfield);
+
+    this.AIRFIELD_FLAT_RADIUS = this.airfield.flatRadius;
     this.AIRFIELD_FLAT_R2 = this.AIRFIELD_FLAT_RADIUS * this.AIRFIELD_FLAT_RADIUS;
-    this.AIRFIELD_SURFACE_Y = 0.08;
+    this.AIRFIELD_SURFACE_Y = this.airfield.surfaceY;
 
     this.WATER_LEVEL = 4.0;
     this.WATER_EXTENT = 24000;
-    this.WATER_RUNWAY_R = 420;
+    this.WATER_RUNWAY_R = this.airfield.enabled ? this.airfield.waterRunwayRadius : 0;
 
     // Active collections
     this.chunks = new Map();
@@ -167,6 +170,71 @@ class LandscapeEngine {
     return v / tot;
   }
 
+  _makeAirfieldConfig(airfield) {
+    const defaults = {
+      enabled: true,
+      flatRadius: 230,
+      surfaceY: 0.08,
+      waterRunwayRadius: 420,
+      runwayEllipseScaleX: 1.45,
+      runwayEllipseScaleZ: 0.22,
+      runwayMaskInner: 220,
+      runwayMaskOuter: 560,
+      corridorXInner: 135,
+      corridorXOuter: 360,
+      corridorZInner: 260,
+      corridorZOuter: 1850,
+      corridorStrength: 0.96,
+      corridorCut: 22,
+      basinNoiseScale: 0.006,
+      basinNoiseOctaves: 2,
+      basinRipple: 5.5,
+      padFlatten: 0.998,
+      padCut: 3.5,
+      pads: [
+        { x: 0, z: 0, xInner: 18, xOuter: 42, zInner: 215, zOuter: 285 },
+        { x: 34, z: 150, xInner: 8, xOuter: 74, zInner: 92, zOuter: 210 },
+        { x: 17, z: 116, xInner: 6, xOuter: 18, zInner: 62, zOuter: 168 },
+      ],
+    };
+
+    if (airfield === false) {
+      return { ...defaults, enabled: false, pads: [] };
+    }
+    if (!airfield) {
+      return { ...defaults, pads: defaults.pads.map(p => ({ ...p })) };
+    }
+    return {
+      ...defaults,
+      ...airfield,
+      pads: Array.isArray(airfield.pads)
+        ? airfield.pads.map(p => ({ ...p }))
+        : defaults.pads.map(p => ({ ...p })),
+    };
+  }
+
+  _airfieldMasks(x, z) {
+    const a = this.airfield;
+    if (!a || !a.enabled) {
+      return { runwayMask: 1, approachCorridor: 0, airfieldPad: 0 };
+    }
+
+    const runwayEllipse = Math.hypot(x * a.runwayEllipseScaleX, z * a.runwayEllipseScaleZ);
+    const runwayMask = this._smoothstepRange(a.runwayMaskInner, a.runwayMaskOuter, runwayEllipse);
+    const corridorX = 1 - this._smoothstepRange(a.corridorXInner, a.corridorXOuter, Math.abs(x));
+    const corridorZ = 1 - this._smoothstepRange(a.corridorZInner, a.corridorZOuter, Math.abs(z));
+    const approachCorridor = this._clamp01(corridorX * corridorZ);
+
+    let pad = 0;
+    for (const p of a.pads) {
+      const padX = 1 - this._smoothstepRange(p.xInner, p.xOuter, Math.abs(x - (p.x || 0)));
+      const padZ = 1 - this._smoothstepRange(p.zInner, p.zOuter, Math.abs(z - (p.z || 0)));
+      pad = Math.max(pad, padX * padZ);
+    }
+
+    return { runwayMask, approachCorridor, airfieldPad: this._clamp01(pad) };
+  }
+
   /**
    * Evaluates the absolute height of the canyon terrain at grid coordinates.
    * @param {number} x - X Coordinate
@@ -174,11 +242,8 @@ class LandscapeEngine {
    * @returns {number} Height
    */
   getHeight(x, z) {
-    const runwayEllipse = Math.hypot(x * 1.45, z * 0.22);
-    const runwayMask = this._smoothstepRange(220, 560, runwayEllipse);
-    const corridorX = 1 - this._smoothstepRange(135, 360, Math.abs(x));
-    const corridorZ = 1 - this._smoothstepRange(260, 1850, Math.abs(z));
-    const approachCorridor = this._clamp01(corridorX * corridorZ);
+    const airfield = this.airfield;
+    const airfieldMasks = this._airfieldMasks(x, z);
 
     let h = 0, amp = 1, freq = 0.0018, tot = 0;
     for (let i = 0; i < 5; i++) {
@@ -202,23 +267,18 @@ class LandscapeEngine {
     h = (base + tr) * step;
 
     // Carve runway corridor
-    h *= Math.max(runwayMask, 1 - approachCorridor * 0.96);
-    h = Math.max(0, h - approachCorridor * 22);
+    h *= Math.max(airfieldMasks.runwayMask, 1 - airfieldMasks.approachCorridor * airfield.corridorStrength);
+    h = Math.max(0, h - airfieldMasks.approachCorridor * airfield.corridorCut);
 
     // Airstrip basin details
-    const basinRipple = (1 - runwayMask) * (this._fbm(x * 0.006, z * 0.006, 2) - 0.5) * 5.5;
+    const basinRipple = (1 - airfieldMasks.runwayMask)
+      * (this._fbm(x * airfield.basinNoiseScale, z * airfield.basinNoiseScale, airfield.basinNoiseOctaves) - 0.5)
+      * airfield.basinRipple;
     h = Math.max(0, h + basinRipple);
 
     // Airfield flatness exclusion
-    const runwayPad = (1 - this._smoothstepRange(18, 42, Math.abs(x)))
-      * (1 - this._smoothstepRange(215, 285, Math.abs(z)));
-    const apronPad = (1 - this._smoothstepRange(8, 74, Math.abs(x - 34)))
-      * (1 - this._smoothstepRange(92, 210, Math.abs(z - 150)));
-    const taxiPad = (1 - this._smoothstepRange(6, 18, Math.abs(x - 17)))
-      * (1 - this._smoothstepRange(62, 168, Math.abs(z - 116)));
-    const airfieldPad = this._clamp01(Math.max(runwayPad, apronPad, taxiPad));
-    h *= 1 - airfieldPad * 0.998;
-    h = Math.max(0, h - airfieldPad * 3.5);
+    h *= 1 - airfieldMasks.airfieldPad * airfield.padFlatten;
+    h = Math.max(0, h - airfieldMasks.airfieldPad * airfield.padCut);
 
     return h;
   }

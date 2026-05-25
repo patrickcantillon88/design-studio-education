@@ -4534,7 +4534,7 @@
             </label>
             <label class="gen-check">
               <input type="checkbox" id="render-textured-grass" />
-              <span>Organic grass texture <em class="gen-hint">dense pixel-art grass blades instead of checkerboard</em></span>
+              <span>Cottage grass texture <em class="gen-hint">dense cottage-style grass blades instead of checkerboard</em></span>
             </label>
             <label class="gen-check">
               <input type="checkbox" id="render-show-crowns" />
@@ -5097,7 +5097,7 @@
     voxelGap: '0',
     voxelBevel: '0.018',
     voxelTerrain: '0',
-    texturedGrass: '0',
+    texturedGrass: '1',
     terrainColors: '{}',
     terrainColorTarget: 'grass',
     materialParts: '{}',
@@ -5283,7 +5283,7 @@
   let renderVoxelGap = storedNumber(RENDER_LS.voxelGap, 0, 0, 0.14);
   let renderVoxelBevel = storedNumber(RENDER_LS.voxelBevel, parseFloat(RENDER_DEFAULTS.voxelBevel), 0, 0.06);
   let renderVoxelTerrain = localStorage.getItem(RENDER_LS.voxelTerrain) === '1';
-  let renderTexturedGrass = localStorage.getItem(RENDER_LS.texturedGrass) === '1';
+  let renderTexturedGrass = localStorage.getItem(RENDER_LS.texturedGrass) !== '0';
   let renderTerrainVoxelResolution = localStorage.getItem(RENDER_LS.terrainVoxelResolution) || 'mixed';
   let showCrowns = localStorage.getItem(RENDER_LS.showCrowns) !== '0';
   if (!['mixed', '4', '6', '8', '12'].includes(renderTerrainVoxelResolution)) renderTerrainVoxelResolution = 'mixed';
@@ -6241,6 +6241,7 @@
     wallTrim:  new THREE.MeshLambertMaterial({ color: 0xe5cf99 }),
     roofBlue:  new THREE.MeshLambertMaterial({ color: 0x2a6dd1 }),
     roofBlueD: new THREE.MeshLambertMaterial({ color: 0x1d4d9c }),
+    boardSide:  new THREE.MeshLambertMaterial({ color: 0x8b8d88, side: THREE.FrontSide }),
     islandUnder:  new THREE.MeshLambertMaterial({ color: 0x34373b, side: THREE.FrontSide }),
     islandUnderD: new THREE.MeshLambertMaterial({ color: 0x202327, side: THREE.FrontSide }),
     door:      new THREE.MeshLambertMaterial({ color: 0x7a4a2e }),
@@ -6488,6 +6489,108 @@
     return tex;
   }
 
+  function createCottageTexture(type, scale = 128) {
+    const canvas = document.createElement('canvas');
+    canvas.width = scale;
+    canvas.height = scale;
+    const ctx = canvas.getContext('2d');
+    const rand = makeMulberry32('cottage-texture:' + type + ':' + scale);
+    function addNoise(amount = 42, alpha = 0.14) {
+      const image = ctx.getImageData(0, 0, scale, scale);
+      for (let i = 0; i < image.data.length; i += 4) {
+        const n = Math.floor((rand() - 0.5) * amount);
+        image.data[i] = Math.max(0, Math.min(255, image.data[i] + n));
+        image.data[i + 1] = Math.max(0, Math.min(255, image.data[i + 1] + n));
+        image.data[i + 2] = Math.max(0, Math.min(255, image.data[i + 2] + n));
+        image.data[i + 3] = Math.floor(255 * (1 - alpha + alpha * rand()));
+      }
+      ctx.putImageData(image, 0, 0);
+    }
+
+    if (type === 'grass') {
+      ctx.fillStyle = '#f5f5f5';
+      ctx.fillRect(0, 0, scale, scale);
+      for (let i = 0; i < 850; i++) {
+        const x = rand() * scale;
+        const y = rand() * scale;
+        const h = 2 + rand() * 8;
+        ctx.strokeStyle = rand() > 0.5 ? '#d4d4d4' : '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + rand() * 3 - 1.5, y - h);
+        ctx.stroke();
+      }
+    } else if (type === 'wood') {
+      ctx.fillStyle = '#f2f2f2';
+      ctx.fillRect(0, 0, scale, scale);
+      for (let x = 0; x < scale; x += 9) {
+        ctx.strokeStyle = x % 18 === 0 ? '#b8b8b8' : '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.bezierCurveTo(x + 4, scale * 0.25, x - 3, scale * 0.65, x + 2, scale);
+        ctx.stroke();
+      }
+      addNoise(30, 0.08);
+    } else if (type === 'glass') {
+      const g = ctx.createLinearGradient(0, 0, scale, scale);
+      g.addColorStop(0, '#9fe3ff');
+      g.addColorStop(1, '#417fa8');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, scale, scale);
+      ctx.fillStyle = 'rgba(255,255,255,0.70)';
+      ctx.fillRect(scale * 0.19, scale * 0.16, scale * 0.13, scale * 0.78);
+      ctx.fillRect(scale * 0.53, scale * 0.16, scale * 0.05, scale * 0.78);
+      ctx.fillStyle = 'rgba(20,42,70,0.22)';
+      ctx.fillRect(0, scale * 0.5 - 3, scale, 6);
+      ctx.fillRect(scale * 0.5 - 3, 0, 6, scale);
+    } else if (type === 'dirt') {
+      ctx.fillStyle = '#eeeeee';
+      ctx.fillRect(0, 0, scale, scale);
+      for (let y = 0; y < scale; y += 11) {
+        ctx.fillStyle = y % 22 === 0 ? '#d8d8d8' : '#e6e6e6';
+        ctx.fillRect(0, y + Math.floor(rand() * 2), scale, 2);
+      }
+      for (let i = 0; i < 420; i++) {
+        const x = Math.floor(rand() * scale);
+        const y = Math.floor(rand() * scale);
+        const w = rand() > 0.78 ? 2 : 1;
+        ctx.fillStyle = rand() > 0.55 ? '#d0d0d0' : '#f7f7f7';
+        ctx.fillRect(x, y, w, 1);
+      }
+      addNoise(24, 0.06);
+    } else {
+      ctx.fillStyle = '#eeeeee';
+      ctx.fillRect(0, 0, scale, scale);
+      ctx.fillStyle = '#b8b8b8';
+      for (let y = 0; y < scale; y += 18) {
+        ctx.fillRect(0, y, scale, 2);
+      }
+      for (let y = 0; y < scale; y += 36) {
+        for (let x = 0; x < scale; x += 32) {
+          ctx.fillRect(x + (y % 72 ? 16 : 0), y, 2, 18);
+        }
+      }
+      for (let i = 0; i < 110; i++) {
+        const x = Math.floor(rand() * scale);
+        const y = Math.floor(rand() * scale);
+        const w = 1 + Math.floor(rand() * 4);
+        const h = 1 + Math.floor(rand() * 3);
+        ctx.fillStyle = rand() > 0.5 ? 'rgba(255,255,255,0.18)' : 'rgba(90,90,90,0.14)';
+        ctx.fillRect(x, y, w, h);
+      }
+      addNoise(26, 0.06);
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestMipmapNearestFilter;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.encoding = THREE.sRGBEncoding;
+    return tex;
+  }
+
   function applyWorldUVs(material, texture, textureScale = 1.0) {
     if (!material) return;
     material.map = texture;
@@ -6533,6 +6636,11 @@
   const texStone = createPixelTexture('stone', 16);
   const texHay = createPixelTexture('hay', 16);
   const texDirt = createPixelTexture('dirt', 16);
+  const texCottageGrass = createCottageTexture('grass', 128);
+  const texCottageWood = createCottageTexture('wood', 128);
+  const texCottageGlass = createCottageTexture('glass', 128);
+  const texCottageStone = createCottageTexture('stone', 128);
+  const texCottageDirt = createCottageTexture('dirt', 128);
 
   function createMaterialImageTexture(src) {
     const tex = new THREE.TextureLoader().load(src, () => {
@@ -6563,6 +6671,11 @@
     stone: texStone,
     hay: texHay,
     dirt: texDirt,
+    'cottage-grass': texCottageGrass,
+    'cottage-wood': texCottageWood,
+    'cottage-glass': texCottageGlass,
+    'cottage-stone': texCottageStone,
+    'cottage-dirt': texCottageDirt,
   };
 
   const MATERIAL_TEXTURE_OPTIONS = [
@@ -6579,6 +6692,11 @@
     { key: 'hay', label: 'Hay / straw' },
     { key: 'dirt', label: 'Dirt specks' },
     { key: 'ripples', label: 'Water ripples' },
+    { key: 'cottage-grass', label: 'Cottage grass' },
+    { key: 'cottage-wood', label: 'Cottage wood' },
+    { key: 'cottage-glass', label: 'Cottage glass' },
+    { key: 'cottage-stone', label: 'Cottage stone' },
+    { key: 'cottage-dirt', label: 'Cottage dirt' },
     { key: 'atlas-nature-wood', label: 'Texture folder: nature + wood' },
     { key: 'atlas-tiles', label: 'Texture folder: tile set' },
     { key: 'atlas-roofs', label: 'Texture folder: roof strips' },
@@ -6602,17 +6720,30 @@
     return materialTextureMap[normalizeMaterialTextureKey(key)] || null;
   }
 
-  const initialGrassTex = renderTexturedGrass ? texGrass : texCheckered;
+  M.grass.color.set(0x75b84b);
+  M.grassEdge.color.set(0x5da23d);
+  M.grassHi.color.set(0x8ccc5d);
+  M.door.color.set(0x7b4b2a);
+  M.woodTrim.color.set(0x5c361d);
+  M.bridgeWood.color.set(0x7b4b2a);
+  M.bridgeWoodD.color.set(0x5c361d);
+  M.fence.color.set(0x7b4b2a);
+  M.trunk.color.set(0x7b4b2a);
+
+  const initialGrassTex = texCottageGrass;
   applyWorldUVs(M.grass, initialGrassTex, 1.0);
   applyWorldUVs(M.grassEdge, initialGrassTex, 1.0);
   applyWorldUVs(M.grassHi, initialGrassTex, 1.0);
+  applyWorldUVs(M.boardSide, texCottageStone, 2.0);
 
   applyWorldUVs(M.path, texNoise, 1.0);
   applyWorldUVs(M.pathTrim, texNoise, 1.0);
   applyWorldUVs(M.pathScuff, texNoise, 1.0);
 
-  applyWorldUVs(M.dirt, texDirt, 2.0);
-  applyWorldUVs(M.dirtRich, texDirt, 2.0);
+  M.dirt.color.set(0x7b4b2a);
+  M.dirtRich.color.set(0x5d361d);
+  applyWorldUVs(M.dirt, texCottageDirt, 1.4);
+  applyWorldUVs(M.dirtRich, texCottageDirt, 1.4);
 
   applyWorldUVs(M.water, texRipples, 1.0);
   applyWorldUVs(M.waterDk, texRipples, 1.0);
@@ -6626,8 +6757,10 @@
 
   applyWorldUVs(M.castleStone, texBrick, 4.0);
   applyWorldUVs(M.castleStoneD, texBrick, 4.0);
-  applyWorldUVs(M.stone, texStone, 4.0);
-  applyWorldUVs(M.stoneDk, texStone, 4.0);
+  M.stone.color.set(0x8b8d88);
+  M.stoneDk.color.set(0x5f6668);
+  applyWorldUVs(M.stone, texCottageStone, 2.0);
+  applyWorldUVs(M.stoneDk, texCottageStone, 2.0);
   applyWorldUVs(M.rock, texStone, 4.0);
   applyWorldUVs(M.rockDk, texStone, 4.0);
   applyWorldUVs(M.rockHi, texStone, 4.0);
@@ -6645,10 +6778,21 @@
 
   applyWorldUVs(M.leaves, texLeaves, 4.0);
   applyWorldUVs(M.leavesDk, texLeaves, 4.0);
-  applyWorldUVs(M.trunk, texWood, 4.0);
-  applyWorldUVs(M.bridgeWood, texPlanks, 3.0);
-  applyWorldUVs(M.bridgeWoodD, texPlanks, 3.0);
-  applyWorldUVs(M.fence, texWood, 4.0);
+  applyWorldUVs(M.trunk, texCottageWood, 3.0);
+  applyWorldUVs(M.bridgeWood, texCottageWood, 3.0);
+  applyWorldUVs(M.bridgeWoodD, texCottageWood, 3.0);
+  applyWorldUVs(M.fence, texCottageWood, 3.0);
+  applyWorldUVs(M.door, texCottageWood, 3.0);
+  applyWorldUVs(M.woodTrim, texCottageWood, 3.0);
+  M.windowB.map = texCottageGlass;
+  M.windowB.color.set(0xffffff);
+  M.windowB.needsUpdate = true;
+  M.manorWindow.map = texCottageGlass;
+  M.manorWindow.color.set(0xffffff);
+  M.manorWindow.needsUpdate = true;
+  M.skyGlass.map = texCottageGlass;
+  M.skyGlass.color.set(0xffffff);
+  M.skyGlass.needsUpdate = true;
 
   const customMaterialCache = new Map();
   function normalizeHexColor(value) {
@@ -7320,7 +7464,7 @@
     if (terrain === 'lava') return M.lava;
     if (terrain === 'sand') return M.sand;
     if (terrain === 'snow') return M.snow;
-    return M.dirt;
+    return M.boardSide;
   }
 
   function terrainRiserMaterials(terrain) {
@@ -7330,7 +7474,7 @@
         base,
         hi: terrainShadeMaterial(base, 10),
         low: terrainShadeMaterial(base, -12),
-        edge: terrainShadeMaterial(M.grassEdge, -8),
+        edge: terrainShadeMaterial(base, -8),
       };
     }
     return {
@@ -19335,7 +19479,7 @@
       if (texturedGrassEl) {
         renderTexturedGrass = !!texturedGrassEl.checked;
         if (oldTexturedGrass !== renderTexturedGrass) {
-          const nextTex = renderTexturedGrass ? texGrass : texCheckered;
+          const nextTex = renderTexturedGrass ? texCottageGrass : texCheckered;
           M.grass.map = nextTex;
           M.grass.needsUpdate = true;
           M.grassEdge.map = nextTex;
@@ -19544,16 +19688,16 @@
       renderVoxelGap = 0;
       renderVoxelBevel = parseFloat(RENDER_DEFAULTS.voxelBevel);
       renderVoxelTerrain = false;
-      renderTexturedGrass = false;
+      renderTexturedGrass = true;
       renderTerrainMaterialAdjustments = {};
       renderTerrainColorTarget = 'grass';
       renderPartMaterialAdjustments = {};
       renderMaterialTarget = 'walls';
       renderMaterialWear = 0;
-      if (typeof texCheckered !== 'undefined') {
-        M.grass.map = texCheckered; M.grass.needsUpdate = true;
-        M.grassEdge.map = texCheckered; M.grassEdge.needsUpdate = true;
-        M.grassHi.map = texCheckered; M.grassHi.needsUpdate = true;
+      if (typeof texCottageGrass !== 'undefined') {
+        M.grass.map = texCottageGrass; M.grass.needsUpdate = true;
+        M.grassEdge.map = texCottageGrass; M.grassEdge.needsUpdate = true;
+        M.grassHi.map = texCottageGrass; M.grassHi.needsUpdate = true;
       }
       commitTerrainMaterialAdjustments();
       commitPartMaterialAdjustments();
@@ -23654,7 +23798,8 @@
   // maps them to engine coords via `scale = 25`, so we shrink the
   // engine's meshes by 1/25 so one engine sample-step = 1 builder unit.
   const LANDSCAPE_MESH_SCALE = 1 / 25;
-  // Offset used in sampleLandscapeCell to skip the flat airfield zone.
+  // Keep landscape sampling in the established terrain region. The embedded
+  // LandscapeEngine airfield is disabled for Tiny World's continuous terrain.
   const LANDSCAPE_MESH_OFFSET = 800;
 
   function landscapeMeshFocusPos() {
@@ -23694,7 +23839,8 @@
       scene: landscapeMeshGroup,
       seed: landscapeEngineInstance.seed,
       initialBiome: landscapeMeshBiome || landscapeEngineInstance.currentBiomeName,
-      styleMode: landscapeMeshStyle || 'lowpoly'
+      styleMode: landscapeMeshStyle || 'lowpoly',
+      airfield: false,
     });
 
     landscapeMeshMode = true;
@@ -23955,14 +24101,15 @@
       scene: dummyScene,
       seed: numericSeed,
       initialBiome: biomeName || 'grassland',
-      styleMode: 'lowpoly'
+      styleMode: 'lowpoly',
+      airfield: false,
     });
     return landscapeEngineInstance;
   }
 
   function sampleLandscapeCell(boardX, boardZ, x, z, engine, gridSize) {
     const size = gridSize || GRID;
-    // Offset by 800 cells (20,000 meters in LandscapeEngine space) to bypass the flat airfield / runway zone at (0,0)
+    // Offset by 800 cells (20,000 meters in LandscapeEngine space) to preserve the established generated terrain region.
     const gx = boardX * size + x + 800;
     const gz = boardZ * size + z + 800;
 

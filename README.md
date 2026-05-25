@@ -122,7 +122,7 @@ outcrops.
 
 ## Architecture
 
-Single `<script>` block, currently ~16k lines of vanilla JS, organised by section
+Single `<script>` block, currently ~29k lines of vanilla JS, organised by section
 comments (`// -------- xyz --------`). The model is split cleanly:
 
 - **`world[x][z]`** — intent: `{ terrain, kind, floors }` per cell.

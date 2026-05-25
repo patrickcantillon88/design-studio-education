@@ -41,7 +41,7 @@ Guidance for AI coding agents working in this repo. Read this before touching
 - Section comments are `// -------- name --------` and they matter — keep
   related code grouped under them. If you add a new system, give it its own
   section header.
-- Boring obvious code over clever. The app is now feature-rich (~16k LoC), so
+- Boring obvious code over clever. The app is now feature-rich (~29k LoC), so
   prefer small, well-sectioned changes over clever abstractions.
 
 ## Mental model
