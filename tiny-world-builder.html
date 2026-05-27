@@ -23806,12 +23806,16 @@
     return updateSelectedBoardObjects(target => {
       const appearance = Object.assign({}, normalizeAppearance(target.cell.appearance) || {});
       const key = axis === 'x' ? 'scaleX' : axis === 'y' ? 'scaleY' : axis === 'z' ? 'scaleZ' : 'objectScale';
-      const current = appearance[key] || 1;
-      const min = key === 'objectScale' ? 0.25 : 0.15;
-      const max = key === 'objectScale' ? 4 : 5;
-      appearance[key] = Math.max(min, Math.min(max, current * amount));
-      if (Math.abs(appearance[key] - 1) < 0.001) delete appearance[key];
-      return { appearance };
+      if (amount === 'reset') {
+        delete appearance[key];
+      } else {
+        const current = appearance[key] || 1;
+        const min = key === 'objectScale' ? 0.25 : 0.15;
+        const max = key === 'objectScale' ? 4 : 5;
+        appearance[key] = Math.max(min, Math.min(max, current * amount));
+        if (Math.abs(appearance[key] - 1) < 0.001) delete appearance[key];
+      }
+      return { appearance: Object.keys(appearance).length ? appearance : null };
     });
   }
 
@@ -30644,12 +30648,12 @@
         return;
       }
       if (rowKey === 'objectScale') {
-        scaleSelectedBoardObject(value === 'down' ? 0.85 : 1.18);
+        scaleSelectedBoardObject(value === 'reset' ? 'reset' : value === 'down' ? 0.85 : 1.18);
         return;
       }
       if (rowKey === 'objectScaleX' || rowKey === 'objectScaleY' || rowKey === 'objectScaleZ') {
         const axis = rowKey === 'objectScaleX' ? 'x' : rowKey === 'objectScaleY' ? 'y' : 'z';
-        scaleSelectedBoardObject(value === 'down' ? 0.85 : 1.18, axis);
+        scaleSelectedBoardObject(value === 'reset' ? 'reset' : value === 'down' ? 0.85 : 1.18, axis);
         return;
       }
       if (rowKey === 'objectMove') {
@@ -30826,6 +30830,13 @@
         }
         return hasValue ? firstValue : null;
       };
+      const scaleResetValue = (items, key) => {
+        if (!items.length) return null;
+        return items.every(item => {
+          const appearance = normalizeAppearance(item && item.appearance) || {};
+          return !appearance[key] || Math.abs(appearance[key] - 1) < 0.001;
+        }) ? 'reset' : null;
+      };
       const sizeValueForCell = cell => {
         const level = cell && cell.kind ? (cell.floors || 1) : terrainLevelForCell(cell);
         return level <= 1 ? 'small' : level >= 4 ? 'large' : 'medium';
@@ -30872,20 +30883,24 @@
       ] });
       if (selectedTargets.length) {
         addRows('Transform', [
-          { key: 'objectScale', label: 'Scale', options: [
+          { key: 'objectScale', label: 'Scale', currentValue: scaleResetValue(objectCells, 'objectScale'), options: [
             { label: 'Down', value: 'down' },
+            { label: 'Reset', value: 'reset' },
             { label: 'Up', value: 'up' },
           ] },
-          { key: 'objectScaleX', label: 'Scale X', options: [
+          { key: 'objectScaleX', label: 'Scale X', currentValue: scaleResetValue(objectCells, 'scaleX'), options: [
             { label: 'Down', value: 'down' },
+            { label: 'Reset', value: 'reset' },
             { label: 'Up', value: 'up' },
           ] },
-          { key: 'objectScaleY', label: 'Scale Y', options: [
+          { key: 'objectScaleY', label: 'Scale Y', currentValue: scaleResetValue(objectCells, 'scaleY'), options: [
             { label: 'Down', value: 'down' },
+            { label: 'Reset', value: 'reset' },
             { label: 'Up', value: 'up' },
           ] },
-          { key: 'objectScaleZ', label: 'Scale Z', options: [
+          { key: 'objectScaleZ', label: 'Scale Z', currentValue: scaleResetValue(objectCells, 'scaleZ'), options: [
             { label: 'Down', value: 'down' },
+            { label: 'Reset', value: 'reset' },
             { label: 'Up', value: 'up' },
           ] },
           { key: 'objectMove', label: 'Nudge', options: [

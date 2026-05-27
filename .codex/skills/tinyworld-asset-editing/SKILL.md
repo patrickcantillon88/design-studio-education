@@ -49,6 +49,7 @@ Selection properties:
 - Colour rows and preview quick chips should route through `bodyColor`/`topColor` for any supported built-in kind, not just buildings. Expand `applyAppearanceToObject()` material buckets when exposing new colour rows so the world render and selection preview actually change.
 - Colour rows should include a `Default` option that clears only the matching `bodyColor`/`topColor` override while preserving materials, style, transform, and the other colour row.
 - Selected-object transform reset controls should clear rotation, offsets, object scale, and per-axis scale while preserving non-transform appearance fields like model/voxel stamp IDs, materials, colours, and style.
+- Selected-object scale rows should also provide per-scale reset controls that clear only `objectScale`, `scaleX`, `scaleY`, or `scaleZ`, preserving materials, colours, model IDs, and style.
 - Selected-object material scale controls should offer a reset path that clears only the matching texture-scale key and keeps the chosen texture/material, colours, model IDs, and style intact.
 
 Stamps panel:
