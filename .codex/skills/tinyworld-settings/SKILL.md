@@ -13,6 +13,7 @@ Keep settings changes compatible with the existing static single-file app:
 - Settings tabs should remain real `role="tab"` buttons inside a `role="tablist"` and support click plus Arrow/Home/End keyboard navigation.
 - Panels should be `role="tabpanel"` with stable IDs and `aria-labelledby` pointing at the matching tab.
 - Settings search should be a thin UI layer over the existing tab/panel wiring: never rename controls for search, keep hidden rows reversible when the query clears, and route automatic tab changes through `selectSettingsTab()`.
+- Search result counts may be shown inside tab buttons, but keep the tab's `data-settings-tab` value, `role`, keyboard navigation, and accessible label in sync.
 
 Organization guidance:
 

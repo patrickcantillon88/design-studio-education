@@ -3140,6 +3140,10 @@
     background: transparent;
     color: var(--muted);
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     font: inherit;
     font-size: 13px;
     font-weight: 600;
@@ -3160,6 +3164,21 @@
       0 1px 2px rgba(20, 30, 50, 0.06);
   }
   .settings-tab.search-miss:not(.active) { opacity: 0.45; }
+  .settings-tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: rgba(96, 125, 179, 0.14);
+    color: #38547a;
+    font-size: 10px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+  .settings-tab-count[hidden] { display: none; }
   .settings-panels {
     min-width: 0;
   }
@@ -22844,6 +22863,22 @@
     const settingsTabs = Array.from(modal.querySelectorAll('[data-settings-tab]'));
     const settingsPanels = Array.from(modal.querySelectorAll('[data-settings-panel]'));
 
+    settingsTabs.forEach(tab => {
+      if (tab.querySelector('.settings-tab-label')) return;
+      const labelText = tab.textContent.trim();
+      tab.dataset.settingsLabel = labelText;
+      tab.textContent = '';
+      const label = document.createElement('span');
+      label.className = 'settings-tab-label';
+      label.textContent = labelText;
+      const count = document.createElement('span');
+      count.className = 'settings-tab-count';
+      count.hidden = true;
+      count.setAttribute('aria-hidden', 'true');
+      tab.append(label, count);
+      tab.setAttribute('aria-label', labelText);
+    });
+
     function fillMaterialTextureSelect(select) {
       if (!select || select.options.length) return;
       for (const opt of MATERIAL_TEXTURE_OPTIONS) {
@@ -22946,6 +22981,15 @@
         if (tab) {
           tab.classList.toggle('search-miss', terms.length > 0 && panelMatches === 0);
           tab.title = terms.length ? (panelMatches ? panelMatches + ' matching settings' : 'No matching settings') : '';
+          const count = tab.querySelector('.settings-tab-count');
+          if (count) {
+            count.textContent = String(panelMatches);
+            count.hidden = !(terms.length && panelMatches > 0);
+          }
+          const label = tab.dataset.settingsLabel || tab.textContent.trim();
+          tab.setAttribute('aria-label', terms.length
+            ? label + ', ' + panelMatches + ' matching setting' + (panelMatches === 1 ? '' : 's')
+            : label);
         }
       });
       if (terms.length && activePanel && !Number(activePanel.dataset.settingsSearchMatches) && firstMatchPanel && !opts.keepActive) {
