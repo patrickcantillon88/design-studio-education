@@ -215,26 +215,200 @@
 
   // Thick blue silhouette outline — inverted hull (BackSide, scaled up), same
   // technique as the selection outline. This is the "blue line" around the ghost.
-  const GHOST_OUTLINE_MAT = new THREE.MeshBasicMaterial({
-    color: 0x2f8fff,
-    side: THREE.BackSide,
-    transparent: true,
-    opacity: 0.92,
-    depthWrite: false,
-    depthTest: true,
-  });
+  // Fresh per build so a fading placement echo can't dim the live ghost's line.
+  function makeGhostOutlineMaterial() {
+    return new THREE.MeshBasicMaterial({
+      color: 0x2f8fff,
+      side: THREE.BackSide,
+      transparent: true,
+      opacity: 0.92,
+      depthWrite: false,
+      depthTest: true,
+    });
+  }
   const GHOST_OUTLINE_SCALE = 1.12;
 
-  // Advance the scanline scroll/flicker; called once per frame from animate().
+  // Placement "phase-in": on commit we release the live ghost as a fading echo
+  // (holo → gone over ECHO_DUR) while the real object drops in underneath.
+  const ghostEchoes = [];
+  const ECHO_DUR = 0.4;
+
+  function releaseGhostPlacementEcho() {
+    if (!ghostPreview || !ghostPreview.visible) return;
+    const body = ghostPreview.userData.ghostHoloMaterial || null;
+    const outline = ghostPreview.userData.ghostOutlineMaterial || null;
+    ghostEchoes.push({
+      obj: ghostPreview,
+      body, outline,
+      baseBase: body ? body.uniforms.uBase.value : 0.1,
+      baseOpacity: outline ? outline.opacity : 0.9,
+      t0: null,
+    });
+    // Hand the mesh off to the echo list and build a fresh ghost for next hover.
+    ghostPreview = null;
+    ghostPreviewKey = null;
+    ensureGhostPreview();
+    if (ghostPreview) ghostPreview.visible = false;
+  }
+
+  // Advance the scanline scroll/flicker (live ghost) + fade any placement
+  // echoes; called once per frame from animate() with t in seconds.
   function tickGhostHolo(t) {
     const m = ghostPreview && ghostPreview.visible && ghostPreview.userData.ghostHoloMaterial;
     if (m && m.uniforms && m.uniforms.uTime) m.uniforms.uTime.value = t;
+    for (let i = ghostEchoes.length - 1; i >= 0; i--) {
+      const e = ghostEchoes[i];
+      if (e.t0 == null) e.t0 = t;
+      const k = (t - e.t0) / ECHO_DUR;
+      if (k >= 1) {
+        if (e.obj.parent) e.obj.parent.remove(e.obj);
+        disposeGroup(e.obj);
+        ghostEchoes.splice(i, 1);
+        continue;
+      }
+      const fade = 1 - k;
+      if (e.body && e.body.uniforms) {
+        e.body.uniforms.uBase.value = e.baseBase * fade;
+        e.body.uniforms.uTime.value = t;
+      }
+      if (e.outline) e.outline.opacity = e.baseOpacity * fade;
+    }
+  }
+
+  // Kinds whose final look depends on neighbours (so the ghost previews the
+  // *merged* result: house clusters, joined rocks, connected fences / castle
+  // walls, oriented bridges).
+  const GHOST_MERGE_KINDS = { house: 1, rock: 1, fence: 1, bridge: 1 };
+
+  function ghostHoverGrid() {
+    if (!currentHover) return null;
+    const hx = currentHover.x + (currentHover.boardX || 0) * GRID;
+    const hz = currentHover.z + (currentHover.boardZ || 0) * GRID;
+    if (!Number.isFinite(hx) || !Number.isFinite(hz)) return null;
+    return { hx, hz };
+  }
+
+  // Signature of the hover neighbourhood for merge tools — when it changes we
+  // rebuild the ghost so the merged shape stays accurate as the cursor moves.
+  function ghostMergeContext(tool) {
+    if (!tool || !GHOST_MERGE_KINDS[tool.kind]) return '';
+    const g = ghostHoverGrid();
+    if (!g) return 'nh';
+    let s = g.hx + ',' + g.hz;
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        const c = getWorldCell(g.hx + dx, g.hz + dz);
+        s += (c && c.kind) ? c.kind[0] : '.';
+      }
+    }
+    if (tool.kind === 'fence' && typeof fenceSideFromHover === 'function') s += '|' + fenceSideFromHover(currentHover);
+    return s;
+  }
+
+  // Build the would-be cell for a placement, matching applyTool's data.
+  function wouldBeCellForTool(tool, existing) {
+    const terrain = (existing && existing.terrain) || 'grass';
+    const terrainFloors = existing
+      ? (typeof terrainLevelForCell === 'function' ? terrainLevelForCell(existing) : (existing.terrainFloors || 1))
+      : 1;
+    const base = { terrain, terrainFloors, kind: null, floors: 1, buildingType: null, fenceSide: null, extras: [] };
+    if (tool.kind === 'house') {
+      const v = tool.activeVariant;
+      return Object.assign(base, { kind: 'house', buildingType: (v && v.buildingType) || null, floors: 1 });
+    }
+    if (tool.kind === 'rock') return Object.assign(base, { kind: 'rock', floors: 1 });
+    if (tool.kind === 'fence') {
+      const side = (typeof fenceSideFromHover === 'function') ? fenceSideFromHover(currentHover) : 'n';
+      const lvl = (typeof fenceLevelFromSelectedTool === 'function') ? fenceLevelFromSelectedTool() : 1;
+      return Object.assign(base, { kind: 'fence', fenceSide: side, floors: lvl });
+    }
+    if (tool.kind === 'bridge') return Object.assign(base, { terrain: 'water', kind: 'bridge', floors: 1 });
+    return null;
+  }
+
+  // Temporarily inject the would-be cell into the world, build the object with
+  // the same neighbour-aware makers the real renderer uses, restore the world,
+  // and offset multi-cell house clusters to their anchor. Returns the raw mesh
+  // (holo material applied by buildGhostMesh) or null to fall back to standalone.
+  function buildMergedGhostObject(tool) {
+    if (!tool || !GHOST_MERGE_KINDS[tool.kind]) return null;
+    const g = ghostHoverGrid();
+    if (!g) return null;
+    const { hx, hz } = g;
+    const hadRow = !!world[hx];
+    const prev = hadRow ? world[hx][hz] : undefined;
+    const wouldBe = wouldBeCellForTool(tool, prev || null);
+    if (!wouldBe) return null;
+    if (!world[hx]) world[hx] = [];
+    world[hx][hz] = wouldBe;
+    let mesh = null, posX = null, posZ = null;
+    try {
+      const cell = wouldBe, level = cell.floors || 1, kind = cell.kind;
+      if (kind === 'rock') {
+        mesh = makeRock(getRockNeighbors(hx, hz), level, hx, hz, cell.terrain === 'water');
+      } else if (kind === 'bridge') {
+        mesh = makeBridge(getBridgeOrientation(hx, hz), level);
+      } else if (kind === 'fence') {
+        if (cell.terrain === 'path') {
+          const pn = getPathNeighbors(hx, hz);
+          const axis = (pn.e || pn.w) ? 'x' : (pn.n || pn.s) ? 'z' : 'x';
+          mesh = makeRoadGate(normalizeFenceSide(cell.fenceSide), level, axis);
+        } else {
+          mesh = isCastleFence(hx, hz)
+            ? makeCastleWallSegment(getCastleWallNeighbors(hx, hz))
+            : makeFence(normalizeFenceSide(cell.fenceSide), level);
+        }
+      } else if (kind === 'house') {
+        const floors = cell.floors || 1, bType = cell.buildingType || null;
+        if (bType === 'skyscraper')   mesh = makeSkyscraper(Math.max(floors, 4));
+        else if (bType === 'manor')   mesh = makeManor(floors);
+        else if (bType === 'tower')   mesh = makeStoneTower(Math.max(floors, 2), towerPaletteWithAppearance(getMergedBuildingPalette(hx, hz, 'tower'), cell.appearance));
+        else if (bType === 'turret')  mesh = makeTurret(floors);
+        else {
+          const cluster = findHouseCluster(hx, hz);
+          if (cluster.kind === 'turret') mesh = makeTurret(floors);
+          else if (cluster.kind === 'solo') mesh = makeHouse(floors);
+          else if (cluster.kind === 'linear') {
+            mesh = makeStretchedHouse(cluster.length, cluster.orientation, floors);
+            const a = cellRenderPositionForCell(cluster.anchorX, cluster.anchorZ);
+            posX = a.x; posZ = a.z;
+            if (cluster.orientation === 'x') posX += (cluster.length - 1) * TILE / 2;
+            else                              posZ += (cluster.length - 1) * TILE / 2;
+          } else if (cluster.kind === 'composite') {
+            mesh = buildCompositeHouse(cluster.topology, floors);
+            const t = cluster.topology;
+            posX = (t.bbox.xMin + t.bbox.xMax) / 2 - GRID / 2 + 0.5;
+            posZ = (t.bbox.zMin + t.bbox.zMax) / 2 - GRID / 2 + 0.5;
+          } else if (cluster.kind === 'square') {
+            mesh = buildSquareHouse(floors);
+            posX = (cluster.anchorX + 0.5) - GRID / 2 + 0.5;
+            posZ = (cluster.anchorZ + 0.5) - GRID / 2 + 0.5;
+          }
+        }
+      }
+    } catch (_) { mesh = null; }
+    finally {
+      if (prev === undefined) { try { delete world[hx][hz]; } catch (_) {} }
+      else world[hx][hz] = prev;
+    }
+    if (!mesh) return null;
+    // Offset a multi-cell cluster so it sits at its anchor relative to the
+    // hovered tile (the ghost group itself is positioned on the hover cell).
+    if (posX !== null) {
+      const hp = cellRenderPositionForCell(hx, hz);
+      mesh.position.x += (posX - hp.x);
+      mesh.position.z += (posZ - hp.z);
+    }
+    return mesh;
   }
 
   function buildGhostMesh(tool) {
     if (!tool || tool.erase || tool.auto) return null;
     const kind = tool.kind;
-    let mesh = null;
+    // Merge-aware preview first (house clusters, rock/fence/bridge joins).
+    let mesh = buildMergedGhostObject(tool);
+    const isMerged = !!mesh;
+    if (!mesh) {
     if      (kind === 'voxel-build') mesh = makeVoxelBuildStamp(tool.voxelBuildId);
     else if (kind === 'model-stamp') mesh = makeModelStamp(tool.modelStampId);
     else if (kind === 'tree')      mesh = makeTree();
@@ -274,8 +448,9 @@
       mesh = new THREE.Group();
       mesh.add(swatch);
     }
+    } // end standalone build (skipped when a merged mesh was produced)
     if (!mesh) return null;
-    if (kind === 'model-stamp' && tool.modelStampId) {
+    if (!isMerged && kind === 'model-stamp' && tool.modelStampId) {
       const cfg = getModelStampSettings(tool.modelStampId);
       if (cfg.objectScale !== 1) mesh.scale.multiplyScalar(cfg.objectScale);
       if (cfg.offsetY) mesh.position.y += cfg.offsetY;
@@ -285,6 +460,7 @@
     // and drop shadows. We don't keep the real materials — the ghost reads as
     // a projection, then phases into real colours on placement.
     const holo = makeGhostHoloMaterial();
+    const outlineMat = makeGhostOutlineMaterial();
     const meshNodes = [];
     mesh.traverse(o => { if (o.isMesh) meshNodes.push(o); });
     meshNodes.forEach(o => {
@@ -294,7 +470,7 @@
       o.renderOrder = 3;
       // Thick blue outline: a back-faced, scaled-up hull of the same geometry.
       if (o.geometry) {
-        const hull = new THREE.Mesh(o.geometry, GHOST_OUTLINE_MAT);
+        const hull = new THREE.Mesh(o.geometry, outlineMat);
         hull.userData.sharedGeometry = true;  // teardown must not dispose shared geom
         hull.scale.setScalar(GHOST_OUTLINE_SCALE);
         hull.castShadow = false;
@@ -305,19 +481,24 @@
     });
     mesh.userData.ghostPreview = true;
     mesh.userData.ghostHoloMaterial = holo;
+    mesh.userData.ghostOutlineMaterial = outlineMat;
+    mesh.userData.mergedPreview = isMerged;
     return mesh;
   }
 
   function ensureGhostPreview() {
     const sig = ghostToolSignature(selectedTool);
-    if (sig === ghostPreviewKey && ghostPreview) return;
+    // Merge-aware tools rebuild as the hovered neighbourhood changes so the
+    // previewed merged shape stays accurate.
+    const fullSig = sig == null ? null : (sig + '::' + ghostMergeContext(selectedTool));
+    if (fullSig === ghostPreviewKey && ghostPreview) return;
     if (ghostPreview) {
       if (ghostPreview.parent) ghostPreview.parent.remove(ghostPreview);
       disposeGroup(ghostPreview);
       ghostPreview = null;
     }
-    ghostPreviewKey = sig;
-    if (!sig) return;
+    ghostPreviewKey = fullSig;
+    if (sig == null) return;
     ghostPreview = buildGhostMesh(selectedTool);
     if (ghostPreview) {
       ghostPreview.visible = false;
@@ -326,21 +507,29 @@
   }
 
   function updateGhostPlacement() {
+    // Rebuild if the tool or hovered neighbourhood changed (keeps the merged
+    // preview accurate as the cursor moves between tiles).
+    ensureGhostPreview();
     if (!ghostPreview) return;
     if (!currentHover) { ghostPreview.visible = false; return; }
     ghostPreview.visible = true;
     const baseY = hoverHeightForCell(currentHover) - 0.02;
+    // A merged preview is already positioned at its cluster anchor + auto-
+    // oriented, so skip the within-tile nudge and manual rotation for it.
+    const merged = !!ghostPreview.userData.mergedPreview;
+    const ox = merged ? 0 : ghostOffsetX;
+    const oz = merged ? 0 : ghostOffsetZ;
     ghostPreview.position.set(
-      currentHover.worldX + ghostOffsetX,
+      currentHover.worldX + ox,
       baseY + 0.01,
-      currentHover.worldZ + ghostOffsetZ
+      currentHover.worldZ + oz
     );
     // Always render the preview at the snapped angle so it matches the
     // rotation that consumeGhostTransform will commit on click.
     const defaultModelRot = selectedTool && selectedTool.kind === 'model-stamp' && selectedTool.modelStampId
       ? getModelStampSettings(selectedTool.modelStampId).rotationY
       : 0;
-    ghostPreview.rotation.y = defaultModelRot + snapRot(ghostRotation);
+    ghostPreview.rotation.y = merged ? 0 : (defaultModelRot + snapRot(ghostRotation));
   }
 
   function resetGhostTransform() {

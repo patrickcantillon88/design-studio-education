@@ -69,6 +69,10 @@
       const boardZ = cell.boardZ || 0;
       applyTool(cell.x + boardX * GRID, cell.z + boardZ * GRID, opts);
     }
+    // Placement phase-in: release the live ghost as a fading holo echo so the
+    // object "materialises" as the real mesh drops in. Skip during drag-paint
+    // (opts.drawing) so we don't spawn an echo per cell.
+    if (!opts.drawing && typeof releaseGhostPlacementEcho === 'function') releaseGhostPlacementEcho();
   }
 
   // Read the current ghost rotation/offset to attach to a fresh setCell.
