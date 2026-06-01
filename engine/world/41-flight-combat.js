@@ -255,8 +255,17 @@
     const cands = objectMeshCandidates(origin);
     let nearestDist = Infinity, nearestEntry = null, nearestPoint = null;
     for (const entry of cands) {
-      const hits = _fcRay.intersectObject(entry.object, true);
-      if (hits.length && hits[0].distance < nearestDist) {
+      const obj = entry.object;
+      let hits = null;
+      try {
+        hits = _fcRay.intersectObject(obj, true);
+      } catch (_) {
+        // Some cell object trees contain a null child (factory artifact) which
+        // makes THREE's recursive raycast throw. Skip that object rather than
+        // letting it break the combat tick.
+        continue;
+      }
+      if (hits && hits.length && hits[0].distance < nearestDist) {
         nearestDist = hits[0].distance; nearestEntry = entry; nearestPoint = hits[0].point;
       }
     }
