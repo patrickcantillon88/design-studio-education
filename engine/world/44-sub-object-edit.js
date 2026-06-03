@@ -209,8 +209,10 @@
     reHighlightSelection();
   }
   function setExplode(on) {
+    // Capture base positions only from a fully-collapsed state, so toggling
+    // mid-animation never records exploded coords as the base (avoids drift).
+    if (on && explodeProgress < 0.01) captureExplodeParts();
     explodeTarget = on ? 1 : 0;
-    if (on) captureExplodeParts();
   }
   function isExploded() { return explodeTarget > 0.5; }
   function tickSubEditExplode(dt) {
