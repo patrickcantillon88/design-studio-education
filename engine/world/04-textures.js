@@ -5,6 +5,13 @@
     canvas.height = scale;
     const ctx = canvas.getContext('2d');
     const rand = makeMulberry32('pixel-texture:' + type + ':' + scale);
+    function tileRect(x, y, w, h) {
+      ctx.fillRect(x, y, w, h);
+      if (x < 0) ctx.fillRect(x + scale, y, w, h);
+      if (x + w > scale) ctx.fillRect(x - scale, y, w, h);
+      if (y < 0) ctx.fillRect(x, y + scale, w, h);
+      if (y + h > scale) ctx.fillRect(x, y - scale, w, h);
+    }
 
     if (type === 'checkered') {
       ctx.fillStyle = '#ffffff';
@@ -178,6 +185,434 @@
         ctx.moveTo(x, y);
         ctx.lineTo(x + len, y + Math.floor(rand() * 3) - 1);
         ctx.stroke();
+      }
+    } else if (type === 'island-side-blocks') {
+      ctx.fillStyle = '#a8a49a';
+      ctx.fillRect(0, 0, scale, scale);
+      const blockW = Math.max(36, Math.floor(scale / 2.8));
+      const blockH = Math.max(28, Math.floor(scale / 3.6));
+      for (let y = -blockH; y < scale + blockH; y += blockH) {
+        const row = Math.floor((y + blockH) / blockH);
+        const offset = (row % 2) * Math.floor(blockW * 0.42);
+        for (let x = -blockW - offset; x < scale + blockW; x += blockW) {
+          const w = blockW + Math.floor((rand() - 0.5) * blockW * 0.32);
+          const h = blockH + Math.floor((rand() - 0.5) * blockH * 0.30);
+          const px = x + Math.floor((rand() - 0.5) * blockW * 0.12);
+          const py = y + Math.floor((rand() - 0.5) * blockH * 0.12);
+          const r = rand();
+          ctx.fillStyle = r > 0.72 ? '#c4c0b4' : (r > 0.36 ? '#aaa69b' : '#8f8a80');
+          tileRect(px + 1, py + 1, w - 2, h - 2);
+          ctx.fillStyle = 'rgba(255,255,255,0.18)';
+          tileRect(px + 2, py + 2, Math.max(4, w - 5), 2);
+          tileRect(px + 2, py + 2, 2, Math.max(4, h - 5));
+          ctx.fillStyle = 'rgba(40,38,34,0.16)';
+          tileRect(px + 1, py + h - 3, Math.max(4, w - 3), 2);
+          tileRect(px + w - 3, py + 1, 2, Math.max(4, h - 3));
+        }
+      }
+      for (let i = 0; i < scale * 0.16; i++) {
+        const x = Math.floor(rand() * scale);
+        const y = Math.floor(rand() * scale);
+        const len = 3 + Math.floor(rand() * Math.max(3, scale / 12));
+        ctx.strokeStyle = rand() > 0.50 ? 'rgba(255,255,255,0.10)' : 'rgba(42,40,36,0.10)';
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + len, y + Math.floor(rand() * 3) - 1);
+        ctx.stroke();
+      }
+    } else if (type === 'island-edge-strata') {
+      ctx.fillStyle = '#9f9a8e';
+      ctx.fillRect(0, 0, scale, scale);
+      const grassH = Math.floor(scale * 0.22);
+      const dirtStart = Math.floor(scale * 0.20);
+      const stoneStart = Math.floor(scale * 0.72);
+      ctx.fillStyle = '#86aa45';
+      ctx.fillRect(0, 0, scale, grassH);
+      const grassBlock = Math.max(10, Math.floor(scale / 7));
+      for (let x = -grassBlock; x < scale + grassBlock; x += grassBlock) {
+        const drop = Math.floor(grassH * (0.55 + rand() * 0.90));
+        const w = grassBlock + Math.floor((rand() - 0.5) * grassBlock * 0.45);
+        ctx.fillStyle = rand() > 0.62 ? '#a8ca58' : (rand() > 0.28 ? '#7fa13e' : '#5d7f31');
+        tileRect(x, 0, w, drop);
+        ctx.fillStyle = 'rgba(24,44,14,0.26)';
+        tileRect(x + Math.floor(w * 0.70), drop - 2, Math.max(2, Math.floor(w * 0.28)), 3);
+      }
+      const dirtBlock = Math.max(14, Math.floor(scale / 5));
+      for (let y = dirtStart; y < stoneStart; y += dirtBlock) {
+        const row = Math.floor((y - dirtStart) / dirtBlock);
+        const offset = row % 2 ? Math.floor(dirtBlock * 0.45) : 0;
+        for (let x = -offset; x < scale + dirtBlock; x += dirtBlock) {
+          const r = rand();
+          ctx.fillStyle = r > 0.72 ? '#986532' : (r > 0.34 ? '#77502b' : '#56351f');
+          tileRect(x + 1, y + 1, dirtBlock - 2, dirtBlock - 2);
+          ctx.fillStyle = 'rgba(228,164,84,0.16)';
+          tileRect(x + 2, y + 2, dirtBlock - 4, 2);
+          ctx.fillStyle = 'rgba(28,17,10,0.22)';
+          tileRect(x + 1, y + dirtBlock - 3, dirtBlock - 3, 2);
+          tileRect(x + dirtBlock - 3, y + 1, 2, dirtBlock - 2);
+        }
+      }
+      const stoneBlock = Math.max(13, Math.floor(scale / 5.4));
+      for (let y = stoneStart; y < scale + stoneBlock; y += stoneBlock) {
+        const offset = Math.floor((y / stoneBlock) % 2) * Math.floor(stoneBlock * 0.45);
+        for (let x = -offset; x < scale + stoneBlock; x += stoneBlock) {
+          const r = rand();
+          ctx.fillStyle = r > 0.70 ? '#8c877b' : (r > 0.34 ? '#6f6a61' : '#54514b');
+          tileRect(x + 1, y + 1, stoneBlock - 2, stoneBlock - 2);
+          ctx.fillStyle = 'rgba(255,255,255,0.12)';
+          tileRect(x + 2, y + 2, stoneBlock - 4, 1);
+          ctx.fillStyle = 'rgba(18,18,18,0.20)';
+          tileRect(x + 1, y + stoneBlock - 3, stoneBlock - 3, 2);
+        }
+      }
+      for (let i = 0; i < scale * 0.18; i++) {
+        const x = Math.floor(rand() * scale);
+        const y = Math.floor(rand() * scale);
+        ctx.fillStyle = rand() > 0.52 ? 'rgba(255,240,170,0.12)' : 'rgba(20,16,12,0.16)';
+        ctx.fillRect(x, y, 1 + Math.floor(rand() * 2), 1 + Math.floor(rand() * 2));
+      }
+    } else if (type === 'pipe-metal') {
+      const grad = ctx.createLinearGradient(0, 0, scale, 0);
+      grad.addColorStop(0, '#8f9aa3');
+      grad.addColorStop(0.30, '#c6ced4');
+      grad.addColorStop(0.58, '#eef2f4');
+      grad.addColorStop(1, '#6c747c');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, scale, scale);
+      for (let y = 0; y < scale; y += Math.max(4, Math.floor(scale / 8))) {
+        ctx.fillStyle = y % 16 === 0 ? 'rgba(40,48,54,0.16)' : 'rgba(255,255,255,0.16)';
+        ctx.fillRect(0, y, scale, 1);
+      }
+      for (let x = 0; x < scale; x += Math.max(8, Math.floor(scale / 4))) {
+        ctx.fillStyle = 'rgba(28,34,40,0.12)';
+        ctx.fillRect(x, 0, 1, scale);
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        ctx.fillRect(Math.min(scale - 1, x + 1), 0, 1, scale);
+      }
+      for (let i = 0; i < scale * scale * 0.10; i++) {
+        const x = Math.floor(rand() * scale);
+        const y = Math.floor(rand() * scale);
+        ctx.fillStyle = rand() > 0.54 ? 'rgba(255,255,255,0.14)' : 'rgba(20,28,34,0.12)';
+        ctx.fillRect(x, y, 1 + Math.floor(rand() * 2), 1);
+      }
+    } else if (type === 'water-froth') {
+      ctx.fillStyle = '#f7fdff';
+      ctx.fillRect(0, 0, scale, scale);
+      for (let i = 0; i < Math.max(24, scale * 0.65); i++) {
+        const x = Math.floor(rand() * scale);
+        const y = Math.floor(rand() * scale);
+        const w = 2 + Math.floor(rand() * Math.max(3, scale / 9));
+        const h = 1 + Math.floor(rand() * Math.max(2, scale / 18));
+        const r = rand();
+        ctx.fillStyle = r > 0.72 ? '#ffffff' : (r > 0.38 ? '#dfeff4' : '#c8e6ef');
+        ctx.fillRect(x, y, w, h);
+        if (x + w > scale) ctx.fillRect(0, y, x + w - scale, h);
+        if (y + h > scale) ctx.fillRect(x, 0, w, y + h - scale);
+      }
+      for (let i = 0; i < Math.max(6, scale * 0.16); i++) {
+        const x = Math.floor(rand() * scale);
+        const y = Math.floor(rand() * scale);
+        const len = 2 + Math.floor(rand() * Math.max(3, scale / 10));
+        ctx.strokeStyle = rand() > 0.50 ? 'rgba(0,170,220,0.26)' : 'rgba(255,255,255,0.52)';
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo((x + len) % scale, y + Math.floor(rand() * 3) - 1);
+        ctx.stroke();
+      }
+    } else if (type === 'path-pavers') {
+      ctx.fillStyle = '#b6b4aa';
+      ctx.fillRect(0, 0, scale, scale);
+      const paver = Math.max(44, Math.floor(scale / 3));
+      for (let y = 0; y < scale + paver; y += paver) {
+        const row = Math.floor(y / paver);
+        const offset = (row % 2) * Math.floor(paver * 0.46);
+        for (let x = -offset; x < scale + paver; x += paver) {
+          const w = paver + Math.floor(rand() * 9) - 4;
+          const h = paver + Math.floor(rand() * 7) - 3;
+          const r = rand();
+          ctx.fillStyle = r > 0.76 ? '#e5e2d7' : (r > 0.38 ? '#d0cdc1' : '#bdb9ad');
+          tileRect(x + 1, y + 1, w - 2, h - 2);
+          const chip = Math.max(16, Math.floor(paver / 2));
+          for (let yy = y + 3; yy < y + h - 4; yy += chip) {
+            for (let xx = x + 3; xx < x + w - 4; xx += chip) {
+              if (rand() < 0.70) continue;
+              ctx.fillStyle = rand() > 0.55 ? 'rgba(255,255,255,0.06)' : 'rgba(82,80,72,0.04)';
+              tileRect(xx, yy, chip, chip);
+            }
+          }
+          ctx.fillStyle = 'rgba(255,255,255,0.20)';
+          tileRect(x + 2, y + 2, w - 4, 2);
+          tileRect(x + 2, y + 2, 2, h - 4);
+          ctx.fillStyle = 'rgba(64,62,56,0.14)';
+          tileRect(x + 1, y + h - 3, w - 3, 2);
+          tileRect(x + w - 3, y + 1, 2, h - 3);
+        }
+      }
+      for (let i = 0; i < scale * 0.22; i++) {
+        const x = Math.floor(rand() * scale);
+        const y = Math.floor(rand() * scale);
+        ctx.fillStyle = rand() > 0.52 ? 'rgba(255,255,255,0.08)' : 'rgba(76,74,66,0.07)';
+        ctx.fillRect(x, y, 2, 2);
+      }
+    } else if (type === 'castle-block') {
+      ctx.fillStyle = '#c4c2bb';
+      ctx.fillRect(0, 0, scale, scale);
+      const block = Math.max(44, Math.floor(scale / 1.45));
+      for (let y = 0; y < scale + block; y += block) {
+        const offset = (Math.floor(y / block) % 2) * Math.floor(block * 0.45);
+        for (let x = -offset; x < scale + block; x += block) {
+          const w = block + Math.floor(rand() * 5) - 2;
+          const h = block + Math.floor(rand() * 4) - 1;
+          const r = rand();
+          ctx.fillStyle = r > 0.72 ? '#e7e5de' : (r > 0.35 ? '#d1d0c9' : '#bbb9b1');
+          tileRect(x + 1, y + 1, w - 2, h - 2);
+          ctx.fillStyle = 'rgba(255,255,255,0.24)';
+          tileRect(x + 2, y + 2, w - 4, 2);
+          tileRect(x + 2, y + 2, 2, h - 4);
+          ctx.fillStyle = 'rgba(68,68,64,0.12)';
+          tileRect(x + 1, y + h - 3, w - 3, 2);
+          tileRect(x + w - 3, y + 1, 2, h - 3);
+          if (rand() > 0.45) {
+            ctx.fillStyle = 'rgba(88,88,82,0.08)';
+            tileRect(x + Math.floor(w * 0.36), y + Math.floor(h * 0.52), Math.max(2, Math.floor(w * 0.28)), 2);
+          }
+        }
+      }
+      for (let i = 0; i < scale * 0.45; i++) {
+        const x = Math.floor(rand() * scale);
+        const y = Math.floor(rand() * scale);
+        ctx.fillStyle = rand() > 0.55 ? 'rgba(255,255,255,0.08)' : 'rgba(72,72,68,0.06)';
+        ctx.fillRect(x, y, 2, 1);
+      }
+    } else if (type === 'brick-building') {
+      ctx.fillStyle = '#6e241e';
+      ctx.fillRect(0, 0, scale, scale);
+      const rowH = Math.max(7, Math.floor(scale / 8));
+      const brickW = Math.max(15, Math.floor(scale / 4));
+      for (let y = 0; y < scale + rowH; y += rowH) {
+        const offset = (Math.floor(y / rowH) % 2) * Math.floor(brickW * 0.5);
+        for (let x = -offset; x < scale + brickW; x += brickW) {
+          const r = rand();
+          ctx.fillStyle = r > 0.66 ? '#b74c37' : (r > 0.28 ? '#91402f' : '#6f2d25');
+          tileRect(x + 1, y + 1, brickW - 2, rowH - 2);
+          ctx.fillStyle = 'rgba(255,224,180,0.18)';
+          tileRect(x + 2, y + 2, brickW - 5, 1);
+          ctx.fillStyle = 'rgba(24,11,9,0.22)';
+          tileRect(x + 1, y + rowH - 2, brickW - 2, 1);
+          if (rand() > 0.58) {
+            ctx.fillStyle = 'rgba(255,230,180,0.16)';
+            tileRect(x + Math.floor(rand() * Math.max(2, brickW - 5)) + 2, y + 2, 2, 2);
+          }
+        }
+      }
+    } else if (type === 'roof-shingles') {
+      ctx.fillStyle = '#76767e';
+      ctx.fillRect(0, 0, scale, scale);
+      const rowH = Math.max(22, Math.floor(scale / 3));
+      const shingleW = Math.max(44, Math.floor(scale / 1.5));
+      for (let y = 0; y < scale + rowH; y += rowH) {
+        const offset = (Math.floor(y / rowH) % 2) * Math.floor(shingleW * 0.5);
+        for (let x = -offset; x < scale + shingleW; x += shingleW) {
+          const r = rand();
+          ctx.fillStyle = r > 0.70 ? '#d9d6e0' : (r > 0.32 ? '#aaa6b5' : '#858193');
+          tileRect(x + 1, y + 1, shingleW - 2, rowH - 1);
+          ctx.fillStyle = 'rgba(255,255,255,0.16)';
+          tileRect(x + 2, y + 2, shingleW - 4, 2);
+          ctx.fillStyle = 'rgba(24,20,34,0.22)';
+          tileRect(x + 1, y + rowH - 2, shingleW - 2, 2);
+          tileRect(x + shingleW - 2, y + 2, 1, rowH - 3);
+        }
+      }
+    } else if (type === 'window-lit') {
+      const g = ctx.createRadialGradient(scale * 0.5, scale * 0.50, scale * 0.05, scale * 0.5, scale * 0.5, scale * 0.70);
+      g.addColorStop(0, '#fff0a6');
+      g.addColorStop(0.55, '#f0a83e');
+      g.addColorStop(1, '#5a2c16');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, scale, scale);
+      ctx.fillStyle = 'rgba(42,23,15,0.70)';
+      ctx.fillRect(0, 0, scale, 4);
+      ctx.fillRect(0, scale - 4, scale, 4);
+      ctx.fillRect(0, 0, 4, scale);
+      ctx.fillRect(scale - 4, 0, 4, scale);
+      ctx.fillRect(Math.floor(scale * 0.49), 3, 3, scale - 6);
+      ctx.fillRect(3, Math.floor(scale * 0.48), scale - 6, 3);
+      ctx.fillStyle = 'rgba(255,255,210,0.55)';
+      ctx.fillRect(Math.floor(scale * 0.20), Math.floor(scale * 0.12), Math.floor(scale * 0.16), Math.floor(scale * 0.76));
+      ctx.fillRect(Math.floor(scale * 0.58), Math.floor(scale * 0.12), Math.floor(scale * 0.08), Math.floor(scale * 0.76));
+    } else if (type === 'window-unlit') {
+      const g = ctx.createLinearGradient(0, 0, scale, scale);
+      g.addColorStop(0, '#36465a');
+      g.addColorStop(0.55, '#151d2a');
+      g.addColorStop(1, '#080b10');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, scale, scale);
+      ctx.fillStyle = 'rgba(11,12,14,0.78)';
+      ctx.fillRect(0, 0, scale, 4);
+      ctx.fillRect(0, scale - 4, scale, 4);
+      ctx.fillRect(0, 0, 4, scale);
+      ctx.fillRect(scale - 4, 0, 4, scale);
+      ctx.fillRect(Math.floor(scale * 0.49), 3, 3, scale - 6);
+      ctx.fillRect(3, Math.floor(scale * 0.48), scale - 6, 3);
+      ctx.fillStyle = 'rgba(120,154,190,0.28)';
+      ctx.fillRect(Math.floor(scale * 0.18), Math.floor(scale * 0.12), Math.floor(scale * 0.12), Math.floor(scale * 0.72));
+      ctx.fillRect(Math.floor(scale * 0.55), Math.floor(scale * 0.10), Math.floor(scale * 0.06), Math.floor(scale * 0.72));
+    } else if (type === 'grass-side') {
+      ctx.fillStyle = '#6ea033';
+      ctx.fillRect(0, 0, scale, scale);
+      const block = Math.max(42, Math.floor(scale / 1.5));
+      for (let y = 0; y < scale + block; y += block) {
+        for (let x = 0; x < scale; x += block) {
+          const r = rand();
+          ctx.fillStyle = r > 0.68 ? '#a9d251' : (r > 0.30 ? '#84b63b' : '#66952e');
+          tileRect(x + 1, y + 1, block - 2, block - 2);
+          ctx.fillStyle = 'rgba(255,255,150,0.18)';
+          tileRect(x + 2, y + 2, block - 4, 2);
+          ctx.fillStyle = 'rgba(20,52,15,0.24)';
+          tileRect(x + 1, y + block - 3, block - 2, 2);
+        }
+      }
+      for (let i = 0; i < scale * 0.55; i++) {
+        const x = Math.floor(rand() * scale);
+        const y = Math.floor(rand() * scale);
+        ctx.fillStyle = rand() > 0.5 ? 'rgba(192,238,88,0.24)' : 'rgba(44,92,26,0.18)';
+        ctx.fillRect(x, y, 2, 2 + Math.floor(rand() * 2));
+      }
+    } else if (type === 'grass-voxel') {
+      ctx.fillStyle = '#86b94a';
+      ctx.fillRect(0, 0, scale, scale);
+      const chip = Math.max(26, Math.floor(scale / 2.4));
+      for (let y = 0; y < scale; y += chip) {
+        for (let x = 0; x < scale; x += chip) {
+          const r = rand();
+          ctx.fillStyle = r > 0.70 ? '#b6d866' : (r > 0.34 ? '#8eb84d' : '#6f9d38');
+          ctx.fillRect(x, y, chip, chip);
+        }
+      }
+      for (let i = 0; i < scale * 0.42; i++) {
+        const x = Math.floor(rand() * scale);
+        const y = Math.floor(rand() * scale);
+        const h = 2 + Math.floor(rand() * 4);
+        ctx.fillStyle = rand() > 0.52 ? 'rgba(206,238,110,0.26)' : 'rgba(48,100,28,0.20)';
+        ctx.fillRect(x, y, 1, h);
+        if (rand() > 0.82 && x + 1 < scale) ctx.fillRect(x + 1, y + Math.floor(h * 0.5), 1, 1);
+      }
+    } else if (type === 'soil-side') {
+      ctx.fillStyle = '#7d522c';
+      ctx.fillRect(0, 0, scale, scale);
+      const patch = Math.max(24, Math.floor(scale / 2.45));
+      for (let y = -patch; y < scale + patch; y += patch) {
+        const rowOffset = Math.floor((rand() - 0.5) * patch * 0.70);
+        for (let x = -patch; x < scale + patch; x += patch) {
+          const r = rand();
+          const px = x + rowOffset + Math.floor((rand() - 0.5) * patch * 0.32);
+          const py = y + Math.floor((rand() - 0.5) * patch * 0.22);
+          const w = patch + Math.floor((rand() - 0.5) * patch * 0.45);
+          const h = patch + Math.floor((rand() - 0.5) * patch * 0.38);
+          ctx.fillStyle = r > 0.74 ? '#a66c39' : (r > 0.34 ? '#80502a' : '#643b20');
+          tileRect(px, py, w, h);
+          if (rand() > 0.48) {
+            ctx.fillStyle = 'rgba(224,154,76,0.12)';
+            tileRect(px + 2, py + 2, Math.max(3, w - 5), 2);
+          }
+          if (rand() > 0.42) {
+            ctx.fillStyle = 'rgba(43,24,12,0.10)';
+            tileRect(px + Math.floor(w * 0.58), py + Math.floor(h * 0.18), 2, Math.max(4, Math.floor(h * 0.55)));
+          }
+        }
+      }
+      for (let i = 0; i < scale * 0.36; i++) {
+        const x = Math.floor(rand() * scale);
+        const y = Math.floor(rand() * scale);
+        ctx.fillStyle = rand() > 0.58 ? 'rgba(220,146,70,0.18)' : 'rgba(38,22,12,0.15)';
+        ctx.fillRect(x, y, 1 + Math.floor(rand() * 3), 1 + Math.floor(rand() * 2));
+      }
+      for (let i = 0; i < scale * 0.10; i++) {
+        const x = Math.floor(rand() * scale);
+        const y = Math.floor(rand() * scale);
+        const len = 3 + Math.floor(rand() * Math.max(4, scale / 8));
+        ctx.strokeStyle = rand() > 0.45 ? 'rgba(232,170,92,0.13)' : 'rgba(34,19,10,0.14)';
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + len, y + Math.floor(rand() * 5) - 2);
+        ctx.stroke();
+      }
+    } else if (type === 'fence-timber') {
+      ctx.fillStyle = '#a86d35';
+      ctx.fillRect(0, 0, scale, scale);
+      const plank = Math.max(12, Math.floor(scale / 4));
+      for (let y = 0; y < scale; y += plank) {
+        const r = rand();
+        ctx.fillStyle = r > 0.64 ? '#d19655' : (r > 0.28 ? '#bd7d3c' : '#985f2d');
+        ctx.fillRect(0, y + 1, scale, plank - 2);
+        ctx.fillStyle = 'rgba(255,224,150,0.20)';
+        ctx.fillRect(0, y + 3, scale, 2);
+        ctx.fillStyle = 'rgba(72,38,18,0.16)';
+        ctx.fillRect(0, y + plank - 3, scale, 2);
+      }
+      for (let y = 0; y < scale; y += Math.max(7, Math.floor(scale / 8))) {
+        ctx.strokeStyle = y % 16 === 0 ? 'rgba(86,45,20,0.18)' : 'rgba(255,222,145,0.18)';
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.bezierCurveTo(scale * 0.22, y + rand() * 5 - 2, scale * 0.66, y + rand() * 5 - 2, scale, y + rand() * 4 - 2);
+        ctx.stroke();
+      }
+    } else if (type === 'crop-stalk') {
+      ctx.fillStyle = '#5f8b2e';
+      ctx.fillRect(0, 0, scale, scale);
+      for (let x = 0; x < scale; x += Math.max(6, Math.floor(scale / 8))) {
+        const r = rand();
+        ctx.fillStyle = r > 0.58 ? '#b2c94f' : (r > 0.28 ? '#87aa3f' : '#4e7b2a');
+        ctx.fillRect(x, 0, 2 + Math.floor(rand() * 3), scale);
+        ctx.fillStyle = 'rgba(255,235,120,0.18)';
+        ctx.fillRect(x + 1, 0, 1, scale);
+      }
+      for (let i = 0; i < scale * 0.8; i++) {
+        const x = Math.floor(rand() * scale);
+        const y = Math.floor(rand() * scale);
+        ctx.fillStyle = rand() > 0.5 ? 'rgba(225,230,92,0.28)' : 'rgba(28,74,20,0.28)';
+        ctx.fillRect(x, y, 1 + Math.floor(rand() * 2), 2);
+      }
+    } else if (type === 'corn-cob') {
+      ctx.fillStyle = '#d7b032';
+      ctx.fillRect(0, 0, scale, scale);
+      const kernel = Math.max(6, Math.floor(scale / 9));
+      for (let y = 0; y < scale + kernel; y += kernel) {
+        const offset = (Math.floor(y / kernel) % 2) * Math.floor(kernel * 0.5);
+        for (let x = -offset; x < scale + kernel; x += kernel) {
+          const r = rand();
+          ctx.fillStyle = r > 0.72 ? '#ffe372' : (r > 0.34 ? '#e4c24a' : '#b9952c');
+          tileRect(x + 1, y + 1, kernel - 1, kernel - 1);
+          ctx.fillStyle = 'rgba(255,248,160,0.24)';
+          tileRect(x + 2, y + 2, Math.max(1, kernel - 4), 1);
+        }
+      }
+    } else if (type === 'sunflower-petal') {
+      ctx.fillStyle = '#d0a820';
+      ctx.fillRect(0, 0, scale, scale);
+      for (let x = 0; x < scale; x += Math.max(8, Math.floor(scale / 8))) {
+        ctx.fillStyle = rand() > 0.5 ? '#ffe16a' : '#e8be35';
+        ctx.fillRect(x, 0, 5, scale);
+        ctx.fillStyle = 'rgba(129,80,18,0.20)';
+        ctx.fillRect(x + 5, 0, 1, scale);
+      }
+      for (let i = 0; i < scale; i++) {
+        const x = Math.floor(rand() * scale);
+        const y = Math.floor(rand() * scale);
+        ctx.fillStyle = rand() > 0.5 ? 'rgba(255,240,116,0.26)' : 'rgba(120,72,14,0.18)';
+        ctx.fillRect(x, y, 1, 1 + Math.floor(rand() * 2));
+      }
+    } else if (type === 'sunflower-center') {
+      ctx.fillStyle = '#5a3518';
+      ctx.fillRect(0, 0, scale, scale);
+      const seed = Math.max(5, Math.floor(scale / 10));
+      for (let y = 0; y < scale + seed; y += seed) {
+        const offset = (Math.floor(y / seed) % 2) * Math.floor(seed * 0.5);
+        for (let x = -offset; x < scale + seed; x += seed) {
+          const r = rand();
+          ctx.fillStyle = r > 0.70 ? '#8a5a24' : (r > 0.34 ? '#6a431d' : '#321d0e');
+          tileRect(x + 1, y + 1, seed - 1, seed - 1);
+        }
       }
     } else if (type === 'grass') {
       ctx.fillStyle = '#ffffff';
@@ -394,21 +829,21 @@
           float sideFace = 1.0 - smoothstep(0.42, 0.72, abs(seamNormal.y));
           float sideCoord = abs(seamNormal.x) > abs(seamNormal.z) ? vWorldVoxelPos.z : vWorldVoxelPos.x;
           float sideY = vWorldVoxelPos.y + 0.08;
-          float sideGridX = 9.60;
-          float sideGridY = 7.80;
+          float sideGridX = 1.45;
+          float sideGridY = 1.30;
           vec2 sideCell = floor(vec2(sideCoord * sideGridX, sideY * sideGridY));
-          float yBand = twVoxelSeamLine(sideY, sideGridY, 0.015);
-          float vBlock = twVoxelSeamLine(sideCoord, sideGridX, 0.015);
-          float vBlockFine = twVoxelSeamLine(sideCoord + sideY * 0.08, sideGridX * 2.0, 0.005);
+          float yBand = twVoxelSeamLine(sideY, sideGridY, 0.010);
+          float vBlock = twVoxelSeamLine(sideCoord, sideGridX, 0.010);
+          float vBlockFine = twVoxelSeamLine(sideCoord + sideY * 0.08, sideGridX * 1.08, 0.0025);
           float blockShade = twVoxelBlockHash(sideCell) - 0.5;
           float underFace = smoothstep(0.62, 0.86, -seamNormal.y);
-          float underX = twVoxelSeamLine(vWorldVoxelPos.x, 5.00, 0.012);
-          float underZ = twVoxelSeamLine(vWorldVoxelPos.z, 5.00, 0.012);
-          float underCellShade = twVoxelBlockHash(floor(vWorldVoxelPos.xz * 5.00)) - 0.5;
-          float sideSeam = sideFace * clamp(yBand * 0.64 + vBlock * 0.64 + vBlockFine * 0.10, 0.0, 1.0);
+          float underX = twVoxelSeamLine(vWorldVoxelPos.x, 3.20, 0.012);
+          float underZ = twVoxelSeamLine(vWorldVoxelPos.z, 3.20, 0.012);
+          float underCellShade = twVoxelBlockHash(floor(vWorldVoxelPos.xz * 3.20)) - 0.5;
+          float sideSeam = sideFace * clamp(yBand * 0.42 + vBlock * 0.42 + vBlockFine * 0.04, 0.0, 1.0);
           float seam = clamp(sideSeam + underFace * max(underX, underZ) * 0.42, 0.0, 1.0);
-          diffuseColor.rgb *= 1.0 + sideFace * blockShade * 0.055 + underFace * underCellShade * 0.045;
-          diffuseColor.rgb *= mix(1.0, 0.56, seam);
+          diffuseColor.rgb *= 1.0 + sideFace * blockShade * 0.035 + underFace * underCellShade * 0.045;
+          diffuseColor.rgb *= mix(1.0, 0.70, seam);
           `
         );
       }
@@ -564,6 +999,23 @@
   const texDirt = createPixelTexture('dirt', 16);
   const texSand = createPixelTexture('sand', 16);
   const texRockFace = createPixelTexture('rock-face', 32);
+  const texIslandSideBlocks = createPixelTexture('island-side-blocks', 128);
+  const texPipeMetal = createPixelTexture('pipe-metal', 64);
+  const texWaterFroth = createPixelTexture('water-froth', 64);
+  const texPathPavers = createPixelTexture('path-pavers', 128);
+  const texCastleBlock = createPixelTexture('castle-block', 64);
+  const texBuildingBrick = createPixelTexture('brick-building', 64);
+  const texRoofShingles = createPixelTexture('roof-shingles', 64);
+  const texWindowLit = createPixelTexture('window-lit', 64);
+  const texWindowUnlit = createPixelTexture('window-unlit', 64);
+  const texGrassVoxel = createPixelTexture('grass-voxel', 64);
+  const texGrassSide = createPixelTexture('grass-side', 64);
+  const texSoilSide = createPixelTexture('soil-side', 64);
+  const texFenceTimber = createPixelTexture('fence-timber', 64);
+  const texCropStalk = createPixelTexture('crop-stalk', 64);
+  const texCornCob = createPixelTexture('corn-cob', 64);
+  const texSunflowerPetal = createPixelTexture('sunflower-petal', 64);
+  const texSunflowerCenter = createPixelTexture('sunflower-center', 64);
   const texCottageGrass = createCottageTexture('grass', 128);
   const texCottageWood = createCottageTexture('wood', 128);
   const texCottageGlass = createCottageTexture('glass', 128);
@@ -586,6 +1038,8 @@
   const texAtlasTileSet = createMaterialImageTexture('textures/HJCliEjbEAA9Ah2.jpeg');
   const texAtlasRoofStrips = createMaterialImageTexture('textures/HJCliEqagAAE8e4.jpeg');
   const texAtlasReference = createMaterialImageTexture('textures/reference.jpeg');
+  const texIslandSideVoxel = createMaterialImageTexture('textures/island-side-stone-voxel.png');
+  const texIslandUndersideVoxel = createMaterialImageTexture('textures/island-underside-voxel.png');
   const proceduralPixelTextures = {
     checkered: texCheckered,
     noise: texNoise,
@@ -601,6 +1055,23 @@
     dirt: texDirt,
     sand: texSand,
     'rock-face': texRockFace,
+    'island-side-blocks': texIslandSideBlocks,
+    'pipe-metal': texPipeMetal,
+    'water-froth': texWaterFroth,
+    'path-pavers': texPathPavers,
+    'castle-block': texCastleBlock,
+    'brick-building': texBuildingBrick,
+    'roof-shingles': texRoofShingles,
+    'window-lit': texWindowLit,
+    'window-unlit': texWindowUnlit,
+    'grass-voxel': texGrassVoxel,
+    'grass-side': texGrassSide,
+    'soil-side': texSoilSide,
+    'fence-timber': texFenceTimber,
+    'crop-stalk': texCropStalk,
+    'corn-cob': texCornCob,
+    'sunflower-petal': texSunflowerPetal,
+    'sunflower-center': texSunflowerCenter,
     'cottage-grass': texCottageGrass,
     'cottage-wood': texCottageWood,
     'cottage-glass': texCottageGlass,
@@ -623,6 +1094,21 @@
     { key: 'dirt', label: 'Dirt specks' },
     { key: 'sand', label: 'Sand grain' },
     { key: 'rock-face', label: 'Rock face' },
+    { key: 'island-side-blocks', label: 'Large island side blocks' },
+    { key: 'path-pavers', label: 'Chunky path pavers' },
+    { key: 'castle-block', label: 'Large stone blocks' },
+    { key: 'brick-building', label: 'Red brick building' },
+    { key: 'roof-shingles', label: 'Chunky roof shingles' },
+    { key: 'window-lit', label: 'Lit mullion window' },
+    { key: 'window-unlit', label: 'Unlit mullion window' },
+    { key: 'grass-voxel', label: 'Voxel grass blades' },
+    { key: 'grass-side', label: 'Grass side blocks' },
+    { key: 'soil-side', label: 'Soil side blocks' },
+    { key: 'fence-timber', label: 'Fence timber' },
+    { key: 'crop-stalk', label: 'Crop stalks' },
+    { key: 'corn-cob', label: 'Corn kernels' },
+    { key: 'sunflower-petal', label: 'Sunflower petals' },
+    { key: 'sunflower-center', label: 'Sunflower seeds' },
     { key: 'ripples', label: 'Water ripples' },
     { key: 'cottage-grass', label: 'Cottage grass' },
     { key: 'cottage-wood', label: 'Cottage wood' },
@@ -672,67 +1158,147 @@
   applyWorldUVs(M.grass, initialGrassTex, 1.0);
   applyWorldUVs(M.grassEdge, initialGrassTex, 1.0);
   applyWorldUVs(M.grassHi, initialGrassTex, 1.0);
-  applyWorldUVs(M.boardSide, texRockFace, 2.4, { voxelSeams: true });
+  M.boardSide.color.set(0xc4bdb2);
+  applyWorldUVs(M.boardSide, texIslandSideBlocks, 0.22, { voxelSeams: true });
 
+  M.path.color.set(0xf2d29c);
+  M.pathTrim.color.set(0xd9b780);
+  M.pathScuff.color.set(0xc9aa70);
   applyWorldUVs(M.path, texNoise, 1.0);
   applyWorldUVs(M.pathTrim, texNoise, 1.0);
   applyWorldUVs(M.pathScuff, texNoise, 1.0);
 
-  M.dirt.color.set(0x7b4b2a);
-  M.dirtRich.color.set(0x5d361d);
-  applyWorldUVs(M.dirt, texCottageDirt, 1.4);
-  applyWorldUVs(M.dirtRich, texCottageDirt, 1.4);
+  M.dirt.color.set(0xffffff);
+  M.dirtRich.color.set(0xffffff);
+  applyWorldUVs(M.dirt, texSoilSide, 0.22);
+  applyWorldUVs(M.dirtRich, texSoilSide, 0.20);
 
   applyFlowingWaterUVs(M.water, texRipples, 1.0);
   applyFlowingWaterUVs(M.waterDk, texRipples, 1.0);
 
-  applyWorldUVs(M.wallCream, texCottageStone, 10.0);
-  applyWorldUVs(M.wallTrim, texCottageStone, 10.0);
-  applyWorldUVs(M.roofBlue, texShingles, 28.0);
-  applyWorldUVs(M.roofBlueD, texShingles, 28.0);
-  applyWorldUVs(M.islandUnder, texRockFace, 2.8, { voxelSeams: true });
-  applyWorldUVs(M.islandUnderD, texRockFace, 2.8, { voxelSeams: true });
+  M.wallCream.color.set(0xffffff);
+  M.wallTrim.color.set(0xf4f3ee);
+  applyWorldUVs(M.wallCream, texCastleBlock, 0.28);
+  applyWorldUVs(M.wallTrim, texCastleBlock, 0.28);
+  applyWorldUVs(M.roofBlue, texRoofShingles, 0.34);
+  applyWorldUVs(M.roofBlueD, texRoofShingles, 0.34);
+  M.islandUnder.color.set(0xffffff);
+  M.islandUnderD.color.set(0xffffff);
+  applyWorldUVs(M.islandUnder, texIslandUndersideVoxel, 0.58, { voxelSeams: true });
+  applyWorldUVs(M.islandUnderD, texIslandUndersideVoxel, 0.58, { voxelSeams: true });
+  M.utilityPipe.color.set(0x55616a);
+  M.utilityPipeD.color.set(0x2f373e);
+  M.utilityClamp.color.set(0x66717a);
+  M.utilityCable.color.set(0x10141a);
+  M.utilityCableB.color.set(0x16263a);
+  applyWorldUVs(M.utilityPipe, texPipeMetal, 1.8);
+  applyWorldUVs(M.utilityPipeD, texPipeMetal, 1.8);
+  applyWorldUVs(M.utilityClamp, texPipeMetal, 2.6);
+  M.waterFoam.color.set(0xffffff);
+  applyWorldUVs(M.waterFoam, texWaterFroth, 2.4);
+  M.waterfallFoamPuff.map = texWaterFroth;
+  M.waterfallFoamPuff.color.set(0xffffff);
+  M.waterfallFoamPuff.needsUpdate = true;
 
-  applyWorldUVs(M.castleStone, texBrick, 11.0);
-  applyWorldUVs(M.castleStoneD, texBrick, 11.0);
+  M.castleStone.color.set(0xffffff);
+  M.castleStoneD.color.set(0xe8e7df);
+  applyWorldUVs(M.castleStone, texCastleBlock, 0.28);
+  applyWorldUVs(M.castleStoneD, texCastleBlock, 0.28);
   M.stone.color.set(0x8b8d88);
   M.stoneDk.color.set(0x5f6668);
   applyWorldUVs(M.stone, texCottageStone, 2.0);
   applyWorldUVs(M.stoneDk, texCottageStone, 2.0);
+  M.stoneSide = M.stone.clone();
+  M.stoneSide.color.set(0xc8c0b5);
+  applyWorldUVs(M.stoneSide, texIslandSideBlocks, 0.24, { voxelSeams: true });
   applyWorldUVs(M.rock, texStone, 4.0);
   applyWorldUVs(M.rockDk, texStone, 4.0);
   applyWorldUVs(M.rockHi, texStone, 4.0);
 
-  applyWorldUVs(M.manorBrick, texCottageStone, 10.0);
-  applyWorldUVs(M.manorBrickD, texCottageStone, 10.0);
-  applyWorldUVs(M.manorTrim, texNoise, 1.6);
-  applyWorldUVs(M.manorRoof, texShingles, 28.0);
-  applyWorldUVs(M.manorRoofD, texShingles, 28.0);
+  M.manorBrick.color.set(0xffffff);
+  M.manorBrickD.color.set(0xd0a096);
+  M.manorTrim.color.set(0xf4f3ee);
+  applyWorldUVs(M.manorBrick, texBuildingBrick, 2.0);
+  applyWorldUVs(M.manorBrickD, texBuildingBrick, 2.0);
+  applyWorldUVs(M.manorTrim, texCastleBlock, 0.30);
+  applyWorldUVs(M.manorRoof, texRoofShingles, 0.34);
+  applyWorldUVs(M.manorRoofD, texRoofShingles, 0.34);
 
-  applyWorldUVs(M.towerRoof, texShingles, 28.0);
-  applyWorldUVs(M.towerRoofD, texShingles, 28.0);
+  applyWorldUVs(M.towerRoof, texRoofShingles, 0.34);
+  applyWorldUVs(M.towerRoofD, texRoofShingles, 0.34);
+  if (M.skyRoof) applyWorldUVs(M.skyRoof, texRoofShingles, 0.34);
 
   applyWorldUVs(M.leaves, texLeaves, 4.0);
   applyWorldUVs(M.leavesDk, texLeaves, 4.0);
   applyWorldUVs(M.trunk, texCottageWood, 3.0);
   applyWorldUVs(M.bridgeWood, texCottageWood, 3.0);
   applyWorldUVs(M.bridgeWoodD, texCottageWood, 3.0);
-  applyWorldUVs(M.fence, texCottageWood, 3.0);
+  M.fence.color.set(0xffffff);
+  M.fenceGarden.color.set(0xffffff);
+  M.fenceGardenD.color.set(0xe0bd91);
+  applyWorldUVs(M.fence, texFenceTimber, 1.4);
+  applyWorldUVs(M.fenceGarden, texFenceTimber, 1.4);
+  applyWorldUVs(M.fenceGardenD, texFenceTimber, 1.4);
   applyWorldUVs(M.door, texCottageWood, 3.0);
   applyWorldUVs(M.woodTrim, texCottageWood, 3.0);
   applyWorldUVs(M.sand, texSand, 1.8);
   applyWorldUVs(M.sandDk, texSand, 1.8);
-  applyWorldUVs(M.towerStone, texCottageStone, 10.0);
-  applyWorldUVs(M.towerStoneD, texCottageStone, 10.0);
-  M.windowB.map = texCottageGlass;
+  M.towerStone.color.set(0xffffff);
+  M.towerStoneD.color.set(0xe8e7df);
+  applyWorldUVs(M.towerStone, texCastleBlock, 0.28);
+  applyWorldUVs(M.towerStoneD, texCastleBlock, 0.28);
+  M.chimney.color.set(0xffffff);
+  M.step.color.set(0xf4f3ee);
+  applyWorldUVs(M.chimney, texCastleBlock, 0.32);
+  applyWorldUVs(M.step, texCastleBlock, 0.28);
+  M.windowB.map = texWindowUnlit;
   M.windowB.color.set(0xffffff);
+  M.windowB.emissive.set(0x07101a);
+  M.windowB.emissiveIntensity = 0.06;
   M.windowB.needsUpdate = true;
-  M.manorWindow.map = texCottageGlass;
+  M.windowNight.map = texWindowUnlit;
+  M.windowNight.color.set(0xffffff);
+  M.windowNight.emissive.set(0x07101a);
+  M.windowNight.emissiveIntensity = 0.08;
+  M.windowNight.needsUpdate = true;
+  M.windowLit.map = texWindowLit;
+  M.windowLit.color.set(0xffffff);
+  M.windowLit.emissive.set(0xffb74a);
+  M.windowLit.emissiveIntensity = 0.86;
+  M.windowLit.needsUpdate = true;
+  M.castleSlit.map = texWindowUnlit;
+  M.castleSlit.color.set(0xffffff);
+  M.castleSlit.emissive.set(0x080d14);
+  M.castleSlit.emissiveIntensity = 0.06;
+  M.castleSlit.needsUpdate = true;
+  M.manorWindow.map = texWindowUnlit;
   M.manorWindow.color.set(0xffffff);
+  M.manorWindow.emissive.set(0x07101a);
+  M.manorWindow.emissiveIntensity = 0.06;
   M.manorWindow.needsUpdate = true;
   M.skyGlass.map = texCottageGlass;
   M.skyGlass.color.set(0xffffff);
   M.skyGlass.needsUpdate = true;
+  M.cornStalk.color.set(0xffffff);
+  M.cornCob.color.set(0xffffff);
+  M.cornLeaf.color.set(0xffffff);
+  M.cropLeaf.color.set(0xffffff);
+  M.cropStem.color.set(0xffffff);
+  M.wheatStalk.color.set(0xffffff);
+  M.wheatHead.color.set(0xffffff);
+  M.sunflowerStalk.color.set(0xffffff);
+  M.sunflowerPetal.color.set(0xffffff);
+  M.sunflowerCenter.color.set(0xffffff);
+  applyWorldUVs(M.cropLeaf, texCropStalk, 2.2);
+  applyWorldUVs(M.cropStem, texCropStalk, 2.2);
+  applyWorldUVs(M.cornStalk, texCropStalk, 2.2);
+  applyWorldUVs(M.cornLeaf, texCropStalk, 2.2);
+  applyWorldUVs(M.cornCob, texCornCob, 3.2);
+  applyWorldUVs(M.wheatStalk, texCropStalk, 2.2);
+  applyWorldUVs(M.wheatHead, texHay, 2.8);
+  applyWorldUVs(M.sunflowerStalk, texCropStalk, 2.2);
+  applyWorldUVs(M.sunflowerPetal, texSunflowerPetal, 2.0);
+  applyWorldUVs(M.sunflowerCenter, texSunflowerCenter, 3.2);
 
   const customMaterialCache = new Map();
   function normalizeHexColor(value) {
@@ -755,12 +1321,13 @@
     const key = String(kind || '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
     if (!key) return null;
     if (key === 'leaf' || key === 'leaves' || key === 'foliage') return 'leaves';
-    if (key === 'shingle' || key === 'roof' || key === 'roofing') return 'shingles';
+    if (key === 'shingle' || key === 'shingles' || key === 'roof' || key === 'roofing') return 'roof-shingles';
     if (key === 'plank' || key === 'planks' || key === 'board' || key === 'boards') return 'planks';
-    if (key === 'stone' || key === 'rock' || key === 'masonry') return 'stone';
+    if (key === 'masonry' || key === 'castle' || key === 'tower' || key === 'blocks') return 'castle-block';
+    if (key === 'stone' || key === 'rock') return 'stone';
     if (key === 'wood' || key === 'trunk' || key === 'timber') return 'wood';
     if (key === 'hay' || key === 'straw' || key === 'wheat') return 'hay';
-    if (key === 'dirt' || key === 'soil' || key === 'mud') return 'dirt';
+    if (key === 'dirt' || key === 'soil' || key === 'mud') return 'soil-side';
     if (key === 'sand' || key === 'beach' || key === 'desert') return 'sand';
     if (proceduralPixelTextures[key]) return key;
     return null;
@@ -768,13 +1335,15 @@
   function proceduralTextureKindForMaterialName(name) {
     const key = String(name || '').toLowerCase();
     if (!key) return null;
-    if (/roof|shingle/.test(key)) return 'shingles';
+    if (/roof|shingle/.test(key)) return 'roof-shingles';
     if (/plank|board|crate|bridge/.test(key)) return 'planks';
     if (/wood|trunk|fence|post|rail|door/.test(key)) return 'wood';
-    if (/stone|rock|slate|masonry|grey|gray/.test(key)) return 'stone';
+    if (/castle|tower|masonry|block|column|chimney/.test(key)) return 'castle-block';
+    if (/stone|rock|slate|grey|gray/.test(key)) return 'stone';
     if (/leaf|leaves|foliage|crop|green|bush|grass|blossom/.test(key)) return 'leaves';
     if (/hay|straw|wheat|yellow/.test(key)) return 'hay';
-    if (/dirt|soil|mud|path/.test(key)) return 'dirt';
+    if (/path|paver|paving/.test(key)) return 'path-pavers';
+    if (/dirt|soil|mud/.test(key)) return 'soil-side';
     if (/sand|beach|desert/.test(key)) return 'sand';
     return null;
   }
@@ -798,16 +1367,23 @@
       else h = 60 * ((r - g) / (max - min) + 4);
       if (h < 0) h += 360;
     }
-    if (sat < 0.14 && val < 0.86) return 'stone';
+    if (sat < 0.14 && val < 0.86) return 'castle-block';
     if (h >= 15 && h <= 45 && val < 0.74 && sat > 0.20) return 'wood';
     if (h >= 38 && h <= 64 && val > 0.52 && sat > 0.32) return 'hay';
     if (h >= 65 && h <= 165 && sat > 0.18) return 'leaves';
-    if (h >= 8 && h <= 38 && val < 0.56) return 'dirt';
+    if (h >= 8 && h <= 38 && val < 0.56) return 'soil-side';
     if (h >= 35 && h <= 58 && val >= 0.56 && sat > 0.14) return 'sand';
     return 'noise';
   }
   function proceduralTextureScaleForKind(kind) {
+    if (kind === 'roof-shingles') return 0.35;
     if (kind === 'shingles' || kind === 'planks' || kind === 'wood') return 3.0;
+    if (kind === 'path-pavers') return 0.2;
+    if (kind === 'castle-block') return 0.3;
+    if (kind === 'grass-voxel') return 0.2;
+    if (kind === 'grass-side') return 0.18;
+    if (kind === 'soil-side') return 0.25;
+    if (kind === 'fence-timber') return 1.0;
     if (kind === 'brick' || kind === 'stone' || kind === 'leaves') return 4.0;
     if (kind === 'dirt' || kind === 'hay' || kind === 'sand') return 2.0;
     return 1.6;
@@ -819,7 +1395,7 @@
     path: ['path', 'pathTrim', 'pathScuff'],
     dirt: ['dirt', 'dirtRich'],
     water: ['water', 'waterDk'],
-    stone: ['stone', 'stoneDk'],
+    stone: ['stone', 'stoneDk', 'stoneSide'],
     sand: ['sand', 'sandDk'],
     snow: ['snow', 'snowDk'],
     lava: ['lava', 'lavaCrust'],
@@ -844,9 +1420,12 @@
 
   const SURFACE_TEXTURE_DEFAULTS = {
     grass: { texture: 'cottage-grass', fallbackTexture: 'checkered', scale: 1.0, materials: ['grass', 'grassEdge', 'grassHi'] },
-    dirt: { texture: 'cottage-dirt', scale: 1.4, materials: ['dirt', 'dirtRich'] },
+    dirt: { texture: 'soil-side', scale: 0.22, materials: ['dirt', 'dirtRich'] },
     sand: { texture: 'sand', scale: 1.8, materials: ['sand', 'sandDk'] },
     stone: { texture: 'cottage-stone', scale: 2.6, materials: ['stone', 'stoneDk'] },
+  };
+  const SURFACE_LINKED_MODEL_DEFAULT_TEXTURES = {
+    stone: 'castle-block',
   };
   const SURFACE_LINKED_MODEL_MATERIALS = {
     stone: ['rock', 'rockDk', 'rockHi', 'castleStone', 'castleStoneD', 'towerStone', 'towerStoneD', 'chimney'],
@@ -856,11 +1435,11 @@
       rock: 4.0,
       rockDk: 4.0,
       rockHi: 4.0,
-      castleStone: 11.0,
-      castleStoneD: 11.0,
-      towerStone: 10.0,
-      towerStoneD: 10.0,
-      chimney: 10.0,
+      castleStone: 0.28,
+      castleStoneD: 0.28,
+      towerStone: 0.28,
+      towerStoneD: 0.28,
+      chimney: 0.32,
     },
   };
 
@@ -887,7 +1466,13 @@
   function applySurfaceTextureDefaults() {
     for (const [surface, def] of Object.entries(SURFACE_TEXTURE_DEFAULTS)) {
       const textureKey = surfaceDefaultTextureKey(surface);
-      for (const name of def.materials) applySurfaceTextureToMaterial(name, textureKey, def.scale, true);
+      for (const name of def.materials) {
+        const materialTexture = surface === 'grass' && !renderTexturedGrass
+          ? textureKey
+          : (def.materialTextures && def.materialTextures[name]) || textureKey;
+        const materialScale = (def.materialScales && def.materialScales[name]) || def.scale;
+        applySurfaceTextureToMaterial(name, materialTexture, materialScale, true);
+      }
     }
   }
 
@@ -916,7 +1501,10 @@
     for (const [surface, names] of Object.entries(SURFACE_LINKED_MODEL_MATERIALS)) {
       const def = SURFACE_TEXTURE_DEFAULTS[surface];
       if (!def) continue;
-      const textureKey = terrainSurfaceTextureKey(surface);
+      const adjustedTexture = normalizeMaterialTextureKey(renderTerrainMaterialAdjustments && renderTerrainMaterialAdjustments[surface] && renderTerrainMaterialAdjustments[surface].texture);
+      const textureKey = adjustedTexture === 'default'
+        ? (SURFACE_LINKED_MODEL_DEFAULT_TEXTURES[surface] || terrainSurfaceTextureKey(surface))
+        : adjustedTexture;
       for (const name of names) applySurfaceTextureToMaterial(name, textureKey, linkedSurfaceMaterialTextureScale(surface, name));
     }
     if (typeof customMaterialCache !== 'undefined') customMaterialCache.clear();

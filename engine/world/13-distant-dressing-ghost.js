@@ -321,7 +321,7 @@
       const w = 0.16 + cellRand(i, GRID, 8980) * 0.22;
       const d = 0.14 + cellRand(i, GRID, 8990) * 0.20;
       const h = 0.07 + cellRand(i, GRID, 9000) * 0.10;
-      vbox(parent, w, h, d, x, y, z, cellRand(i, GRID, 9010) < 0.52 ? M.utilityPipeD : M.rocketSteelD, { noGap: true, noShadow: true, ry: cellRand(i, GRID, 9020) * Math.PI });
+      vbox(parent, w, h, d, x, y, z, M.utilityPipeD, { noGap: true, noShadow: true, ry: cellRand(i, GRID, 9020) * Math.PI });
       if (cellRand(i, GRID, 9030) > 0.35) {
         vbox(parent, w * 0.55, 0.018, d * 0.30, x, y - h * 0.50 - 0.012, z, M.utilityClamp, { noGap: true, noShadow: true });
       }

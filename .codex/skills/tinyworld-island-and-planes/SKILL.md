@@ -58,13 +58,24 @@ many tiny greebles each round), so keep bevel modest. The **distant ghost-island
 dressing** (tiny far preview islands) intentionally stays `noBevel` for perf.
 
 Island shell materials (`M.boardSide`, `M.islandUnder`, `M.islandUnderD`) opt
-into the world-UV shader's `voxelSeams` pass in `04-textures.js`. That pass
-darkens a fine horizontal/vertical side grid and lightly modulates each
+into the world-UV shader's `voxelSeams` pass in `04-textures.js`. Side faces use
+`textures/island-side-stone-voxel.png` (`texIslandSideVoxel`) at a deliberately
+low repeat scale for large pale stone squares, while underside materials use
+`textures/island-underside-voxel.png` (`texIslandUndersideVoxel`) so the bottom
+reads as larger dark beveled voxel blocks; keep replacement shell art seamless
+and power-of-two because Three.js r128 repeats it with mipmaps. The shader pass
+darkens a coarse horizontal/vertical side grid and lightly modulates each
 block/underside cell in the fragment shader. It uses world position/normal
-varyings, so the large merged side slabs read as small voxel seams without
+varyings, so the large merged side slabs read as chunky voxel blocks without
 adding geometry or draw calls. `islandShellMaterial()` in `03-geometry-materials.js`
 copies the base material's `onBeforeCompile` hook so the side-backing clone keeps
-the same fine grid.
+the same coarse grid.
+
+Underside pipes and water details are material-driven: `M.utilityPipe`,
+`M.utilityPipeD`, and `M.utilityClamp` use the internal `pipe-metal` canvas
+texture; `M.waterFoam` and `M.waterfallFoamPuff` use the internal
+`water-froth` canvas texture. Keep these procedural unless the user asks for a
+specific bitmap, because they apply to many tiny utility meshes and particles.
 
 ## Editable-island LOD + whole-island select/delete
 

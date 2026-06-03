@@ -1074,11 +1074,19 @@
     root.add(engine);
     const body = new THREE.Group();
     engine.add(body);
+    const liftStone = voxelBuildMaterial('#6f6a60', 'stone');
+    const liftStoneHi = voxelBuildMaterial('#8b8478', 'stone');
+    const liftSteel = voxelBuildMaterial('#4b5660', 'pipe-metal');
+    const liftSteelD = voxelBuildMaterial('#252d34', 'pipe-metal');
+    const liftWood = voxelBuildMaterial('#6a4a2f', 'wood');
+    const liftWoodD = voxelBuildMaterial('#3d2918', 'wood');
+    const liftLabel = voxelBuildMaterial('#a89d85', 'planks');
+    const liftHeat = voxelBuildMaterial('#432018', 'noise');
 
-    function sourceCube(parent, x, y, z, sx = 1, sy = 1, sz = 1, mat = M.rock) {
+    function sourceCube(parent, x, y, z, sx = 1, sy = 1, sz = 1, mat = liftStone) {
       return vbox(parent, sx, sy, sz, x, y, z, mat, { noGap: true });
     }
-    function sourceVox(parent, x, y, z, mat = M.rock, s = 0.34) {
+    function sourceVox(parent, x, y, z, mat = liftStone, s = 0.34) {
       return sourceCube(parent, x * s, y * s, z * s, s * 0.96, s * 0.96, s * 0.96, mat);
     }
 
@@ -1088,46 +1096,46 @@
           const r = Math.sqrt((x / 4.2) ** 2 + (y / 3.8) ** 2 + (z / 3.3) ** 2);
           if (r < 1.03 && !(Math.abs(x) > 3 && Math.abs(y) > 2)) {
             const roll = cellRand(seed + x * 13 + y * 31 + z * 47, GRID, 8820);
-            const mat = roll < 0.18 ? M.rocketSteelD : (roll < 0.38 ? M.rockHi : M.rock);
+            const mat = roll < 0.18 ? liftSteelD : (roll < 0.38 ? liftStoneHi : liftStone);
             sourceVox(body, x, y, z, mat);
           }
         }
       }
     }
 
-    for (let x = -2; x <= 2; x++) for (let y = -1; y <= 1; y++) sourceVox(body, x, y, -4, M.rocketSteelD);
-    for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) sourceVox(body, x, y, -5, M.rocketSteel);
-    sourceVox(body, 0, 0, -6, M.rockHi);
-    sourceVox(body, 0, 0, -7, M.rocketSteelD);
+    for (let x = -2; x <= 2; x++) for (let y = -1; y <= 1; y++) sourceVox(body, x, y, -4, liftSteelD);
+    for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) sourceVox(body, x, y, -5, liftSteel);
+    sourceVox(body, 0, 0, -6, liftStoneHi);
+    sourceVox(body, 0, 0, -7, liftSteelD);
     // Non-spinning sleeve from the authored shaft into the prop hub. Without
     // this the small balanced hub cubes can read as floating below the spindle.
-    sourceCube(body, 0, 0, EDITABLE_ISLAND_PROP_SPINDLE_LINK_Z, 0.36, 0.36, 0.56, M.rocketSteelD);
+    sourceCube(body, 0, 0, EDITABLE_ISLAND_PROP_SPINDLE_LINK_Z, 0.36, 0.36, 0.56, liftSteelD);
 
-    sourceCube(body, -1.25, 1.95, 0, 0.32, 1.55, 0.32, M.rockHi);
-    sourceCube(body,  1.25, 1.95, 0, 0.32, 1.55, 0.32, M.rockHi);
-    sourceCube(body, 0, 2.78, 0, 3.25, 0.34, 0.58, M.rock);
-    sourceCube(body, 0, 1.45, -0.55, 1.25, 0.32, 0.90, M.bridgeWood);
-    sourceCube(body, 0, 1.78, -0.55, 0.75, 0.26, 0.65, M.bridgeWood);
+    sourceCube(body, -1.25, 1.95, 0, 0.32, 1.55, 0.32, liftStoneHi);
+    sourceCube(body,  1.25, 1.95, 0, 0.32, 1.55, 0.32, liftStoneHi);
+    sourceCube(body, 0, 2.78, 0, 3.25, 0.34, 0.58, liftStone);
+    sourceCube(body, 0, 1.45, -0.55, 1.25, 0.32, 0.90, liftWood);
+    sourceCube(body, 0, 1.78, -0.55, 0.75, 0.26, 0.65, liftWood);
 
-    sourceCube(body, 0, 0.90, 1.35, 1.10, 0.90, 0.80, M.bridgeWood);
-    sourceCube(body, -1.75, -0.15, 0.40, 0.68, 1.25, 1.05, M.rock);
-    sourceCube(body,  1.75, -0.15, 0.40, 0.68, 1.25, 1.05, M.rock);
-    sourceCube(body, -2.25, -0.35, -0.65, 0.75, 0.95, 0.55, M.bridgeWoodD);
-    sourceCube(body,  2.25, -0.35, -0.65, 0.75, 0.95, 0.55, M.bridgeWoodD);
-    sourceCube(body, -2.25, -0.35, -0.98, 0.28, 0.28, 0.12, M.wallTrim);
-    sourceCube(body,  2.25, -0.35, -0.98, 0.28, 0.28, 0.12, M.wallTrim);
+    sourceCube(body, 0, 0.90, 1.35, 1.10, 0.90, 0.80, liftWood);
+    sourceCube(body, -1.75, -0.15, 0.40, 0.68, 1.25, 1.05, liftStone);
+    sourceCube(body,  1.75, -0.15, 0.40, 0.68, 1.25, 1.05, liftStone);
+    sourceCube(body, -2.25, -0.35, -0.65, 0.75, 0.95, 0.55, liftWoodD);
+    sourceCube(body,  2.25, -0.35, -0.65, 0.75, 0.95, 0.55, liftWoodD);
+    sourceCube(body, -2.25, -0.35, -0.98, 0.28, 0.28, 0.12, liftLabel);
+    sourceCube(body,  2.25, -0.35, -0.98, 0.28, 0.28, 0.12, liftLabel);
 
-    sourceCube(body, 0, -1.65, 0, 1.60, 0.55, 1.45, M.rocketSteelD);
-    sourceCube(body, 0, -2.05, 0, 1.10, 0.45, 1.00, M.rocketSteel);
+    sourceCube(body, 0, -1.65, 0, 1.60, 0.55, 1.45, liftSteelD);
+    sourceCube(body, 0, -2.05, 0, 1.10, 0.45, 1.00, liftSteel);
     if (type === 'turbo' || level >= 2) {
-      sourceCube(body, 0, -2.42, 0, 1.34, 0.28, 1.24, M.rocketHeat);
-      sourceCube(body, -1.02, -2.36, 0, 0.18, 0.62, 1.34, M.wallTrim);
-      sourceCube(body, 1.02, -2.36, 0, 0.18, 0.62, 1.34, M.wallTrim);
+      sourceCube(body, 0, -2.42, 0, 1.34, 0.28, 1.24, liftHeat);
+      sourceCube(body, -1.02, -2.36, 0, 0.18, 0.62, 1.34, liftLabel);
+      sourceCube(body, 1.02, -2.36, 0, 0.18, 0.62, 1.34, liftLabel);
     }
     if (type === 'heavy' || level >= 3) {
-      sourceCube(body, -0.82, -2.72, 0, 0.42, 0.34, 0.95, M.rocketSteelD);
-      sourceCube(body, 0.82, -2.72, 0, 0.42, 0.34, 0.95, M.rocketSteelD);
-      sourceCube(body, 0, -2.92, 0, 1.48, 0.20, 1.34, M.rockHi);
+      sourceCube(body, -0.82, -2.72, 0, 0.42, 0.34, 0.95, liftSteelD);
+      sourceCube(body, 0.82, -2.72, 0, 0.42, 0.34, 0.95, liftSteelD);
+      sourceCube(body, 0, -2.92, 0, 1.48, 0.20, 1.34, liftStoneHi);
     }
 
     const prop = new THREE.Group();
@@ -1146,12 +1154,12 @@
     const showLegacyOuterCap = opts.showOuterPropellerCap === true;
     const showHubBlocks = opts.showPropellerHubBlocks === true;
     if (showLegacyOuterCap) {
-      const cap = sourceCube(prop, 0, 0, 0, 0.85 * propScale, 0.85 * propScale, 0.45, M.rocketSteelD);
+      const cap = sourceCube(prop, 0, 0, 0, 0.85 * propScale, 0.85 * propScale, 0.45, liftSteelD);
       cap.userData.legacyPropellerOuterCap = true;
     }
     if (showHubBlocks) {
-      const innerHub = sourceCube(prop, 0, 0, -0.25, 0.45 * propScale, 0.45 * propScale, 0.36, M.rocketSteelD);
-      const outerHub = sourceCube(prop, 0, 0,  0.25, 0.45 * propScale, 0.45 * propScale, 0.36, M.rocketSteelD);
+      const innerHub = sourceCube(prop, 0, 0, -0.25, 0.45 * propScale, 0.45 * propScale, 0.36, liftSteelD);
+      const outerHub = sourceCube(prop, 0, 0,  0.25, 0.45 * propScale, 0.45 * propScale, 0.36, liftSteelD);
       innerHub.userData.legacyPropellerHubBlock = true;
       outerHub.userData.legacyPropellerHubBlock = true;
     }
@@ -1163,10 +1171,10 @@
       bladeRoots.push(blade);
       for (let i = 0; i < 9; i++) {
         const w = (0.42 + i * 0.025) * propScale;
-        sourceCube(blade, 0, (0.58 + i * 0.33) * propScale, 0, w, 0.34 * propScale, 0.28, i % 2 ? M.bridgeWood : M.bridgeWoodD);
+        sourceCube(blade, 0, (0.58 + i * 0.33) * propScale, 0, w, 0.34 * propScale, 0.28, i % 2 ? liftWood : liftWoodD);
       }
-      sourceCube(blade, 0, 3.65 * propScale, 0, 0.55 * propScale, 0.38 * propScale, 0.31, M.wallTrim);
-      sourceCube(blade, 0, 3.95 * propScale, 0, 0.46 * propScale, 0.32 * propScale, 0.28, M.bridgeWood);
+      sourceCube(blade, 0, 3.65 * propScale, 0, 0.55 * propScale, 0.38 * propScale, 0.31, liftLabel);
+      sourceCube(blade, 0, 3.95 * propScale, 0, 0.46 * propScale, 0.32 * propScale, 0.28, liftWood);
     }
     for (let i = 0; i < 4; i++) makeBlade(i * Math.PI / 2 + Math.PI / 4);
     const blurDisc = new THREE.Mesh(
@@ -1187,7 +1195,7 @@
     if (type === 'turbo') {
       for (let i = 0; i < 8; i++) {
         const a = i * Math.PI / 4;
-        const ring = sourceCube(prop, Math.cos(a) * 2.98, Math.sin(a) * 2.98, 0.06, 0.32, 0.72, 0.18, M.rocketSteelD);
+        const ring = sourceCube(prop, Math.cos(a) * 2.98, Math.sin(a) * 2.98, 0.06, 0.32, 0.72, 0.18, liftSteelD);
         ring.rotation.z = a;
       }
     }

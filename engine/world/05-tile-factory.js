@@ -137,7 +137,7 @@
     if (terrain === 'path') return M.pathTrim;
     if (terrain === 'water') return M.waterDk;
     if (terrain === 'dirt') return M.dirtRich;
-    if (terrain === 'stone') return M.stone;
+    if (terrain === 'stone') return M.stoneSide || M.stone;
     if (terrain === 'lava') return M.lava;
     if (terrain === 'sand') return M.sand;
     if (terrain === 'snow') return M.snow;

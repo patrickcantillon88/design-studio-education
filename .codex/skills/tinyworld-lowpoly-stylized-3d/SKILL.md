@@ -65,7 +65,29 @@ Use this together with:
   directly.
 - Never mutate shared `M.*` material colors for one instance; clone or create a new material. The one allowed global exception is `applySeasonFoliage()`, which centrally retints shared foliage/grass materials for season changes.
 - Three.js r128 `MeshLambertMaterial` does not accept `flatShading`; keep faceted model-stamp fallbacks through non-indexed/flat-normal geometry instead of unsupported material flags.
-- Cottage-style defaults are now part of the built-in material language: use deterministic canvas textures (`texCottageGrass`, `texCottageWood`, `texCottageGlass`, `texCottageStone`, `texCottageDirt`) for grass, board-side/foundation stone, windows, wood, and dirt before adding new ad-hoc texture generators.
+- Built-in material references should live in `engine/world/04-textures.js` as
+  deterministic coarse canvas textures before adding per-object overrides.
+  Current coarse material maps include `path-pavers`, `castle-block`,
+  `brick-building`, `roof-shingles`, `window-lit`, `window-unlit`,
+  `grass-voxel`, `grass-side`, `soil-side`, `fence-timber`, `crop-stalk`,
+  `corn-cob`, and sunflower maps. Keep them intentionally large and calm from
+  the default/top-down camera; if the whole island reads noisy, lower world-UV
+  repeat before adding detail. Ground path, ground grass, and ground stone
+  default back to the older calm `noise`/`cottage-grass`/`cottage-stone` maps;
+  use the newer coarse maps on object materials, side panels, or explicit
+  user-selected terrain texture overrides instead. Stone riser/side faces use a
+  separate large-block material (`M.stoneSide`) so cliffs can scale up without
+  changing the stone ground cap.
+  Grass richness should stay FPS-safe through shared texture maps (`grass-voxel`
+  or `grass-side` only when intentionally selected), not added blade meshes.
+  Stone blocks should stay light cool gray like the stair/column references
+  rather than tan or charcoal; fence timber should stay warm and use horizontal
+  grain bands so rails read correctly.
+- Cottage-style defaults remain part of the built-in material language:
+  `texCottageGrass`, `texCottageWood`, and the texture-folder atlases are still
+  useful for softer surfaces, but stone/path/roof/window/fence/crop references
+  should use the newer coarse maps when the requested style is square voxel
+  material.
 - For imported texture variants, create explicit material variants and swap them at the model mesh level.
 - For toolbar thumbnails, increase contrast/saturation carefully so icons read against the white toolbar, but keep the in-world material natural.
 - If a model comes with a texture atlas, set `texture.encoding = THREE.sRGBEncoding` and check `flipY` for GLTF compatibility.
@@ -73,6 +95,10 @@ Use this together with:
 - Model stamp factories should apply `opts.appearance` themselves so world rendering, ghost previews, and selection previews share texture/color overrides; avoid applying the same model-stamp appearance again at the board render wrapper.
 - Wear-and-tear should stay stylized: global grime/desaturation plus small batched chips/scuffs/moss beats realistic noise-heavy shader work.
 - Floating-board depth can reuse existing roof language by inverting a stepped roof form under the board: dark gray shingle-textured slabs, board-footprint width/depth, vertically compressed, and attached below the dirt body. Utility underside dressing should stay toy-like and readable: chunky pipe cylinders, cable trays, clamps, junction boxes, and short dangling cable drops in the existing steel/dark underside palette.
+- Voxel lift/propeller engines use an explicit part palette inside
+  `makeVoxelLiftEngine`: mottled stone body, `pipe-metal` steel hubs/shaft, wood
+  crates/blades, and pale plank labels. Keep future engine material tweaks local
+  to that factory so terrain/object materials do not drift globally.
 - Visual richness should come from selective density contrast: keep cliffs,
   walls, terrain bodies, and island masses chunky, then spend extra detail on
   roofs, windows, crops, trees, path storytelling, and hero landmarks. Prefer
