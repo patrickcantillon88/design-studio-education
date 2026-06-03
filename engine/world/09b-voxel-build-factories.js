@@ -377,7 +377,14 @@
       const z = (v.z - centerZ) * unit;
       const mat = voxelAppearanceMaterial(voxelBuildMaterial(v.color), voxelAppearanceRoleForColor(v.color), opts.appearance);
       trimBase = trimBase || mat;
-      vbox(g, unit, unit, unit, x, y, z, mat);
+      const vm = vbox(g, unit, unit, unit, x, y, z, mat);
+      if (opts.editable && vm) {
+        // Stable per-voxel identity for sub-object hover/select/sculpt. Keyed on
+        // grid coord (NOT array index) so overrides survive add/remove + reload.
+        vm.userData.partKey = 'v:' + v.x + ',' + v.y + ',' + v.z;
+        vm.userData.voxelCoord = { x: v.x, y: v.y, z: v.z };
+        vm.userData.noBatch = true;
+      }
     }
     if (stamp.decorativeOutline || opts.decorativeOutline) {
       addVoxelBuildTrimFrame(g, {
@@ -389,7 +396,7 @@
         maxZ: (maxZ - centerZ) * unit + unit * 0.5,
       }, voxelTrimMaterial(trimBase));
     }
-    g.userData = { kind: 'voxel-build', voxelBuildId: stamp.id, name: stamp.name, chimneyTops: [] };
+    g.userData = { kind: 'voxel-build', voxelBuildId: stamp.id, name: stamp.name, chimneyTops: [], noVoxelBatch: !!opts.editable, voxelEditable: !!opts.editable };
     castReceive(g);
     optimizeVoxelObjectGroup(g, { reason: 'voxel-build-stamp' });
     return g;
@@ -2160,13 +2167,24 @@
     return g;
   }
 
+  // Sub-object edit target: the single cell currently rendered un-batched +
+  // part-keyed so its sub-parts are addressable. null = none. Set via the
+  // inspector's "Edit parts" action; re-renders the cell on change.
+  let voxelSubEditKey = null;
+  function setVoxelSubEditCell(x, z) {
+    voxelSubEditKey = (x == null || z == null) ? null : (x + ',' + z);
+  }
+  function getVoxelSubEditKey() { return voxelSubEditKey; }
+  function isVoxelSubEditCell(x, z) { return voxelSubEditKey !== null && voxelSubEditKey === (x + ',' + z); }
+
   function makeVoxelRenderForCell(kind, x, z, cell, level) {
+    const subEditable = isVoxelSubEditCell(x, z);
     let mesh = null;
     let posX = null;
     let posZ = null;
     let setGridUserData = true;
 
-    if (kind === 'voxel-build') mesh = makeVoxelBuildStamp(cell.appearance && cell.appearance.voxelBuildId, { appearance: cell.appearance });
+    if (kind === 'voxel-build') mesh = makeVoxelBuildStamp(cell.appearance && cell.appearance.voxelBuildId, { appearance: cell.appearance, editable: subEditable });
     else if (kind === 'model-stamp') mesh = makeModelStamp(cell.appearance && cell.appearance.modelStampId, { appearance: cell.appearance });
     else if (kind === 'tree') mesh = makeVoxelTree(level, x, z);
     else if (kind === 'rock') mesh = makeVoxelRock(getRockNeighbors(x, z), level, x, z, cell.terrain === 'water');
