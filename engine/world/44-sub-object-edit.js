@@ -35,18 +35,22 @@
     return null;
   }
 
-  function clearHoverPart() {
+  function clearHoverMeshes() {
     while (subEditHoverGroup.children.length) {
       const m = subEditHoverGroup.children.pop();
       if (m.geometry && m.userData && m.userData.ownGeometry) m.geometry.dispose();
     }
+  }
+  function clearHoverPart() {
+    clearHoverMeshes();
     currentHoverPart = null;
   }
 
   // Inverted-hull highlight of one part mesh, placed in world space from the
   // part's world matrix (mirrors addObjectOutline so it works under any parent).
+  // Clears only the overlay meshes — the handler owns currentHoverPart state.
   function highlightPart(partMesh) {
-    clearHoverPart();
+    clearHoverMeshes();
     if (!partMesh || !partMesh.geometry) return;
     partMesh.updateMatrixWorld(true);
     const hull = new THREE.Mesh(partMesh.geometry, subEditHoverMat);
