@@ -304,34 +304,35 @@
         ctx.fillRect(x, y, 2, 2);
       }
     } else if (type === 'castle-block') {
-      ctx.fillStyle = '#c4c2bb';
+      ctx.fillStyle = '#aba79e';
       ctx.fillRect(0, 0, scale, scale);
-      const block = Math.max(44, Math.floor(scale / 1.45));
-      for (let y = 0; y < scale + block; y += block) {
-        const offset = (Math.floor(y / block) % 2) * Math.floor(block * 0.45);
-        for (let x = -offset; x < scale + block; x += block) {
-          const w = block + Math.floor(rand() * 5) - 2;
-          const h = block + Math.floor(rand() * 4) - 1;
+      const rowH = Math.max(7, Math.floor(scale / 8));
+      for (let y = -rowH; y < scale + rowH; y += rowH) {
+        const row = Math.floor((y + rowH) / rowH);
+        const offset = (row % 2) * Math.floor(rowH * 1.45);
+        let x = -offset - Math.floor(rand() * Math.max(2, rowH));
+        while (x < scale + rowH * 3) {
+          const w = Math.max(12, Math.floor(rowH * (1.7 + rand() * 1.15)));
+          const h = rowH + (rand() > 0.68 ? 1 : 0);
           const r = rand();
-          ctx.fillStyle = r > 0.72 ? '#e7e5de' : (r > 0.35 ? '#d1d0c9' : '#bbb9b1');
+          ctx.fillStyle = r > 0.70 ? '#d5d2c8' : (r > 0.34 ? '#c4c1b8' : '#b7b3aa');
           tileRect(x + 1, y + 1, w - 2, h - 2);
-          ctx.fillStyle = 'rgba(255,255,255,0.24)';
-          tileRect(x + 2, y + 2, w - 4, 2);
-          tileRect(x + 2, y + 2, 2, h - 4);
-          ctx.fillStyle = 'rgba(68,68,64,0.12)';
-          tileRect(x + 1, y + h - 3, w - 3, 2);
-          tileRect(x + w - 3, y + 1, 2, h - 3);
-          if (rand() > 0.45) {
-            ctx.fillStyle = 'rgba(88,88,82,0.08)';
-            tileRect(x + Math.floor(w * 0.36), y + Math.floor(h * 0.52), Math.max(2, Math.floor(w * 0.28)), 2);
+          ctx.fillStyle = 'rgba(255,255,255,0.14)';
+          tileRect(x + 2, y + 2, w - 4, 1);
+          ctx.fillStyle = 'rgba(54,52,48,0.13)';
+          tileRect(x + 1, y + h - 2, w - 2, 1);
+          if (rand() > 0.58) {
+            ctx.fillStyle = rand() > 0.5 ? 'rgba(255,255,255,0.10)' : 'rgba(66,63,58,0.10)';
+            tileRect(x + 2 + Math.floor(rand() * Math.max(1, w - 5)), y + 2 + Math.floor(rand() * Math.max(1, h - 4)), 2, 1);
           }
+          x += w;
         }
       }
-      for (let i = 0; i < scale * 0.45; i++) {
+      for (let i = 0; i < scale * 0.60; i++) {
         const x = Math.floor(rand() * scale);
         const y = Math.floor(rand() * scale);
-        ctx.fillStyle = rand() > 0.55 ? 'rgba(255,255,255,0.08)' : 'rgba(72,72,68,0.06)';
-        ctx.fillRect(x, y, 2, 1);
+        ctx.fillStyle = rand() > 0.55 ? 'rgba(255,255,255,0.07)' : 'rgba(72,70,64,0.06)';
+        ctx.fillRect(x, y, 1 + Math.floor(rand() * 2), 1);
       }
     } else if (type === 'brick-building') {
       ctx.fillStyle = '#6e241e';
@@ -1270,7 +1271,7 @@
     { key: 'rock-face', label: 'Rock face' },
     { key: 'island-side-blocks', label: 'Large island side blocks' },
     { key: 'path-pavers', label: 'Chunky path pavers' },
-    { key: 'castle-block', label: 'Large stone blocks' },
+    { key: 'castle-block', label: 'Stone masonry' },
     { key: 'brick-building', label: 'Red brick building' },
     { key: 'roof-shingles', label: 'Chunky roof shingles' },
     { key: 'window-lit', label: 'Lit mullion window' },
@@ -1296,7 +1297,10 @@
   ];
 
   const ISLAND_SIDE_STRATA_TOP_Y = TOP_H;
+  const ISLAND_SIDE_STRATA_TOP_OVERLAP = 0.075;
   const ISLAND_SIDE_STRATA_HEIGHT = TOP_H + DIRT_H + 0.035;
+  const ISLAND_SIDE_STRATA_RENDER_TOP_Y = ISLAND_SIDE_STRATA_TOP_Y + ISLAND_SIDE_STRATA_TOP_OVERLAP;
+  const ISLAND_SIDE_STRATA_RENDER_HEIGHT = ISLAND_SIDE_STRATA_HEIGHT + ISLAND_SIDE_STRATA_TOP_OVERLAP;
   const ISLAND_SIDE_STRATA_TEXTURE_ASPECT = 1024 / 192;
 
   function makeIslandSideStrataMaterial() {
@@ -1305,9 +1309,9 @@
       side: THREE.FrontSide,
       uniforms: {
         uMap: { value: texIslandSideStrataReference },
-        uTopY: { value: ISLAND_SIDE_STRATA_TOP_Y },
-        uHeight: { value: ISLAND_SIDE_STRATA_HEIGHT },
-        uRepeatWidth: { value: ISLAND_SIDE_STRATA_HEIGHT * ISLAND_SIDE_STRATA_TEXTURE_ASPECT },
+        uTopY: { value: ISLAND_SIDE_STRATA_RENDER_TOP_Y },
+        uHeight: { value: ISLAND_SIDE_STRATA_RENDER_HEIGHT },
+        uRepeatWidth: { value: ISLAND_SIDE_STRATA_RENDER_HEIGHT * ISLAND_SIDE_STRATA_TEXTURE_ASPECT },
       },
       vertexShader: `
         varying vec3 vTwWorldPos;
@@ -1409,8 +1413,8 @@
 
   M.wallCream.color.set(0xffffff);
   M.wallTrim.color.set(0xf4f3ee);
-  applyWorldUVs(M.wallCream, texCastleBlock, 0.28);
-  applyWorldUVs(M.wallTrim, texCastleBlock, 0.28);
+  applyWorldUVs(M.wallCream, texCastleBlock, 0.86);
+  applyWorldUVs(M.wallTrim, texCastleBlock, 0.86);
   applyWorldUVs(M.roofBlue, texRoofShingles, 0.34);
   applyWorldUVs(M.roofBlueD, texRoofShingles, 0.34);
   M.islandUnder.color.set(0xffffff);
@@ -1433,8 +1437,8 @@
 
   M.castleStone.color.set(0xffffff);
   M.castleStoneD.color.set(0xe8e7df);
-  applyWorldUVs(M.castleStone, texCastleBlock, 0.28);
-  applyWorldUVs(M.castleStoneD, texCastleBlock, 0.28);
+  applyWorldUVs(M.castleStone, texCastleBlock, 0.86);
+  applyWorldUVs(M.castleStoneD, texCastleBlock, 0.86);
   M.stone.color.set(0x8b8d88);
   M.stoneDk.color.set(0x5f6668);
   applyWorldUVs(M.stone, texCottageStone, 2.0);
@@ -1451,7 +1455,7 @@
   M.manorTrim.color.set(0xf4f3ee);
   applyWorldUVs(M.manorBrick, texBuildingBrick, 2.0);
   applyWorldUVs(M.manorBrickD, texBuildingBrick, 2.0);
-  applyWorldUVs(M.manorTrim, texCastleBlock, 0.30);
+  applyWorldUVs(M.manorTrim, texCastleBlock, 0.86);
   applyWorldUVs(M.manorRoof, texRoofShingles, 0.34);
   applyWorldUVs(M.manorRoofD, texRoofShingles, 0.34);
 
@@ -1476,12 +1480,12 @@
   applyWorldUVs(M.sandDk, texSand, 1.8);
   M.towerStone.color.set(0xffffff);
   M.towerStoneD.color.set(0xe8e7df);
-  applyWorldUVs(M.towerStone, texCastleBlock, 0.28);
-  applyWorldUVs(M.towerStoneD, texCastleBlock, 0.28);
+  applyWorldUVs(M.towerStone, texCastleBlock, 0.86);
+  applyWorldUVs(M.towerStoneD, texCastleBlock, 0.86);
   M.chimney.color.set(0xffffff);
   M.step.color.set(0xf4f3ee);
-  applyWorldUVs(M.chimney, texCastleBlock, 0.32);
-  applyWorldUVs(M.step, texCastleBlock, 0.28);
+  applyWorldUVs(M.chimney, texCastleBlock, 1.0);
+  applyWorldUVs(M.step, texCastleBlock, 0.86);
   M.windowB.map = texWindowUnlit;
   M.windowB.color.set(0xffffff);
   M.windowB.emissive.set(0x07101a);
@@ -1621,7 +1625,7 @@
     if (kind === 'roof-shingles') return 0.35;
     if (kind === 'shingles' || kind === 'planks' || kind === 'wood') return 3.0;
     if (kind === 'path-pavers') return 0.2;
-    if (kind === 'castle-block') return 0.3;
+    if (kind === 'castle-block') return 0.86;
     if (kind === 'grass-voxel') return 0.2;
     if (kind === 'grass-side') return 0.18;
     if (kind === 'soil-side') return 0.25;
@@ -1677,11 +1681,11 @@
       rock: 4.0,
       rockDk: 4.0,
       rockHi: 4.0,
-      castleStone: 0.28,
-      castleStoneD: 0.28,
-      towerStone: 0.28,
-      towerStoneD: 0.28,
-      chimney: 0.32,
+      castleStone: 0.86,
+      castleStoneD: 0.86,
+      towerStone: 0.86,
+      towerStoneD: 0.86,
+      chimney: 1.0,
     },
   };
 
@@ -1997,6 +2001,21 @@
     applyLinkedSurfaceMaterialTextures();
     recaptureWeatherMaterialBase();
     applyWeatherMaterialTint();
+  }
+
+  function hasPersistedMaterialSettings() {
+    return renderMaterialWear > 0.001
+      || Object.keys(renderTerrainMaterialAdjustments || {}).length > 0
+      || Object.keys(renderPartMaterialAdjustments || {}).length > 0;
+  }
+
+  function applyPersistedMaterialSettingsOnBoot() {
+    if (!hasPersistedMaterialSettings()) return;
+    commitPartMaterialAdjustments();
+    if (typeof rebuildTerrainRender === 'function') rebuildTerrainRender();
+    if (typeof rebuildObjectsRender === 'function') rebuildObjectsRender();
+    if (typeof scheduleVoxelStampRefresh === 'function') scheduleVoxelStampRefresh();
+    if (typeof renderSceneIfReady === 'function') renderSceneIfReady();
   }
 
   function customMaterial(base, hex) {

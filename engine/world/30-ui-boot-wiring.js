@@ -2153,8 +2153,8 @@
         // Drive the CSS --bg variable so the page chrome around the
         // canvas (vignette, body backdrop) follows the same colour.
         document.documentElement.style.setProperty('--bg', '#' + bgHex.toString(16).padStart(6, '0'));
-        // Ink stays high contrast — flip to a light ink at night so the
-        // brand title remains readable on a dark backdrop.
+        // Ink stays high contrast — flip to a light ink at night so UI text
+        // remains readable on a dark backdrop.
         const isDark = (tod.sunI < 0.55);
         document.documentElement.style.setProperty('--ink', isDark ? '#f4ede0' : '#2a2722');
         document.documentElement.style.setProperty('--muted', isDark ? '#d8ccb8' : '#6f695f');
@@ -2507,7 +2507,7 @@
 
   // -------- world-name popup menu (multi-world local slots) --------
   // Maintains an array of named local slots in localStorage keyed by id.
-  // The brand title doubles as the popup trigger; the popup lets the user
+  // The world pill title doubles as the popup trigger; the popup lets the user
   // rename the current world, switch to another, create a new one,
   // duplicate, or open the AI generation modal.  The existing single
   // autosave (STORAGE_KEY = 'tinyworld:v1') stays the source of truth for

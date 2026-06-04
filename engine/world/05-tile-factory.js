@@ -535,7 +535,7 @@
     const buckets = new Map();
 
     function shouldEdge(dir) {
-      return terrainN[dir] !== terrain;
+      return !sameTerrainEdgeFamily(terrainN[dir], terrain);
     }
 
     function queue(geo, mat, px, py, pz) {

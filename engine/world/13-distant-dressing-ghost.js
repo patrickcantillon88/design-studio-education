@@ -139,8 +139,8 @@
     const sideFaceOutset = TILE * 0.055;
     const inset = thickness * 0.5 - sideFaceOutset;
     const spanOuter = span + sideFaceOutset * 2;
-    const wallTopY = ISLAND_SIDE_STRATA_TOP_Y;
-    const wallH = ISLAND_SIDE_STRATA_HEIGHT;
+    const wallTopY = ISLAND_SIDE_STRATA_RENDER_TOP_Y;
+    const wallH = ISLAND_SIDE_STRATA_RENDER_HEIGHT;
     const y = wallTopY - wallH * 0.5;
     const mat = islandShellMaterial(M.boardSideEdge || M.boardSide);
     const north = vbox(parent, spanOuter, wallH, thickness, 0, y, -half + inset, mat, {

@@ -14,6 +14,13 @@
   // syncAiSettings. Runs identically here, after every module is defined.
   setupRenderSettings();
 
+  // Material sliders are persisted before the app boots, but the actual
+  // colour/wear pass used to run only after the user moved a control. Apply it
+  // once now so saved wear-and-tear is visible on first render.
+  if (typeof applyPersistedMaterialSettingsOnBoot === 'function') {
+    applyPersistedMaterialSettingsOnBoot();
+  }
+
   // Build the cloud sea now if it was left enabled in a previous session
   // (default is off, so this is usually a no-op).
   if (typeof setCloudSeaEnabled === 'function' && typeof renderCloudSea !== 'undefined') {

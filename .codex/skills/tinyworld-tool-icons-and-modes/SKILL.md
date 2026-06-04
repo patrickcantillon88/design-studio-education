@@ -18,7 +18,8 @@ description: Use when changing Tiny World Builder's mode indicator, boot tool se
   `mpEditAllowed()`.
 - First load uses the same Build/Play contract through `#welcome-modal`: the
   rounded `.launch-modal` shows `assets/twlogo.png` with BUILD and PLAY buttons,
-  hides app chrome via `body.welcome-launch-open`, and calls
+  includes the compact "Created by Jason Kneen" footer with `@jasonkneen` and
+  `@tinyworldsapp` links, hides app chrome via `body.welcome-launch-open`, and calls
   `window.__tinyworldMode` when the user chooses. Do not bring back the old
   farm/vehicle welcome picker for this path, and keep `publish.sh` copying the
   `assets/` directory into `dist/assets/`.

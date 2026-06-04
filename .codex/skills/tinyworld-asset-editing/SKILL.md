@@ -122,6 +122,11 @@ Stamps panel:
 - Canvas model drops should wait for the dropped model to reach loader `ready`
   before calling `setCell()`. If the GLB/GLTF fails, show the loader error and
   do not stamp the placeholder into the world.
+- Dropped model stamps must persist their source files outside the world JSON
+  (currently IndexedDB) and restore them into the model-stamp registry on boot.
+  Saved cells may keep only `appearance.modelStampId`, but that id must resolve
+  after reload and schedule a model-stamp refresh instead of staying on the
+  generic placeholder.
 
 Validation:
 

@@ -82,12 +82,19 @@ Raised, outlined square (per posType; same pattern for `.tool` and
   and the mooring style radial in `36-mooring-interaction.js` uses
   `tertiary`. Style them via `.radial-btn[data-pos-type]`, not by returning to
   pale generic circles.
+- Radial labels/icons need a separate high-contrast `--radial-ink` on an
+  opaque `--radial-bg`. Do not use very transparent category fills for radial
+  buttons; the 3D scene bleeds through and makes the icon text unreadable.
 - Appbar icon buttons, the single language picker trigger, and the left side-rail
   controls are also category chrome now. Keep `data-pos-type` on those static
   HTML buttons and style them through `.appbar .btn.icon[data-pos-type]`,
   `.controls .btn.icon[data-pos-type]`, and `.language-trigger[data-pos-type]`.
   The language choices live in the upward menu; do not put the four-flag strip
   back in the appbar.
+- The top-center `.world-pill[data-pos-type="primary"]` keeps the primary blue
+  outline, but its resting fill is deliberately bright white glass
+  (`rgba(255,255,255,0.82)`) rather than the generic blue primary tint so the
+  world selector matches the whiter chrome surfaces.
 - The token corner is deliberately plain text, not a pill panel. Keep
   `.token-corner` free of `data-pos-type`, borders, backdrop blur, and hover
   transforms; only the nested GitHub link uses

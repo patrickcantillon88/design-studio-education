@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 
 const root = path.resolve(__dirname, '..');
 const htmlPath = path.join(root, 'tiny-world-builder.html');
@@ -74,6 +75,95 @@ function pngDimensions(file) {
   const buf = fs.readFileSync(file);
   if (buf.length < 24 || buf.toString('ascii', 1, 4) !== 'PNG') return null;
   return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+}
+
+function paethPredictor(a, b, c) {
+  const p = a + b - c;
+  const pa = Math.abs(p - a);
+  const pb = Math.abs(p - b);
+  const pc = Math.abs(p - c);
+  return pa <= pb && pa <= pc ? a : (pb <= pc ? b : c);
+}
+
+function readBasicPngRgba(file) {
+  const buf = fs.readFileSync(file);
+  if (buf.length < 33 || buf.toString('ascii', 1, 4) !== 'PNG') return null;
+  let offset = 8;
+  let width = 0;
+  let height = 0;
+  let bitDepth = 0;
+  let colorType = 0;
+  const idat = [];
+  while (offset + 12 <= buf.length) {
+    const len = buf.readUInt32BE(offset);
+    const type = buf.toString('ascii', offset + 4, offset + 8);
+    const dataStart = offset + 8;
+    const dataEnd = dataStart + len;
+    if (dataEnd + 4 > buf.length) return null;
+    if (type === 'IHDR') {
+      width = buf.readUInt32BE(dataStart);
+      height = buf.readUInt32BE(dataStart + 4);
+      bitDepth = buf[dataStart + 8];
+      colorType = buf[dataStart + 9];
+    } else if (type === 'IDAT') {
+      idat.push(buf.slice(dataStart, dataEnd));
+    } else if (type === 'IEND') {
+      break;
+    }
+    offset = dataEnd + 4;
+  }
+  if (!width || !height || bitDepth !== 8 || !idat.length || (colorType !== 6 && colorType !== 2)) return null;
+  const bpp = colorType === 6 ? 4 : 3;
+  const rowBytes = width * bpp;
+  const raw = zlib.inflateSync(Buffer.concat(idat));
+  const rgba = Buffer.alloc(width * height * 4);
+  const prev = Buffer.alloc(rowBytes);
+  const row = Buffer.alloc(rowBytes);
+  let inOffset = 0;
+  for (let y = 0; y < height; y++) {
+    const filter = raw[inOffset++];
+    raw.copy(row, 0, inOffset, inOffset + rowBytes);
+    inOffset += rowBytes;
+    for (let i = 0; i < rowBytes; i++) {
+      const left = i >= bpp ? row[i - bpp] : 0;
+      const up = prev[i] || 0;
+      const upLeft = i >= bpp ? prev[i - bpp] : 0;
+      if (filter === 1) row[i] = (row[i] + left) & 255;
+      else if (filter === 2) row[i] = (row[i] + up) & 255;
+      else if (filter === 3) row[i] = (row[i] + Math.floor((left + up) / 2)) & 255;
+      else if (filter === 4) row[i] = (row[i] + paethPredictor(left, up, upLeft)) & 255;
+      else if (filter !== 0) return null;
+    }
+    for (let x = 0; x < width; x++) {
+      const si = x * bpp;
+      const di = (y * width + x) * 4;
+      rgba[di] = row[si];
+      rgba[di + 1] = row[si + 1];
+      rgba[di + 2] = row[si + 2];
+      rgba[di + 3] = colorType === 6 ? row[si + 3] : 255;
+    }
+    row.copy(prev);
+  }
+  return { width, height, rgba };
+}
+
+function pngBrownBandAverage(file) {
+  const png = readBasicPngRgba(file);
+  if (!png) return null;
+  let count = 0;
+  let rSum = 0;
+  let gSum = 0;
+  let bSum = 0;
+  for (let i = 0; i < png.rgba.length; i += 4) {
+    const r = png.rgba[i], g = png.rgba[i + 1], b = png.rgba[i + 2], a = png.rgba[i + 3];
+    if (a > 32 && r > 62 && g > 34 && b < 88 && r > g * 1.06 && g > b * 0.82 && (r - b) > 42 && (g - b) > 12) {
+      count++;
+      rSum += r;
+      gSum += g;
+      bSum += b;
+    }
+  }
+  return count ? { count, r: rSum / count, g: gSum / count, b: bSum / count } : null;
 }
 
 if (!/<script src="engine\/world\/[^"]+\.js">/.test(htmlRaw)) {
@@ -200,6 +290,18 @@ if (!/window\.__tinyworldPreloadModelStamp/.test(html) || !/window\.__tinyworldM
 if (!/await waitForDroppedModel\(assets\[0\]/.test(html) || !/placeDroppedModel\(assets\[0\], evt, target\)/.test(html)) {
   fail('canvas model drops must wait for the actual dropped GLB to load before placing');
 }
+const droppedModelRegisterBody = sourceFunctionBody(html, 'registerDroppedModelStampFiles');
+const droppedModelPersistBody = sourceFunctionBody(html, 'persistDroppedModelStampAssets');
+const droppedModelRestoreBody = sourceFunctionBody(html, 'restorePersistedDroppedModelStamps');
+if (!/MODEL_STAMP_DROPPED_DB_NAME/.test(html) || !/indexedDB\.open\(MODEL_STAMP_DROPPED_DB_NAME/.test(html) || !/createObjectStore\(MODEL_STAMP_DROPPED_STORE,\s*\{\s*keyPath:\s*'id'\s*\}\)/.test(html)) {
+  fail('dropped GLB model stamps must use IndexedDB for reload-safe file persistence');
+}
+if (!/persistDroppedModelStampAssets\(assets, files\)/.test(droppedModelRegisterBody) || !/store\.put/.test(droppedModelPersistBody) || !/fileRecords/.test(droppedModelPersistBody)) {
+  fail('dropped GLB model stamp registration must persist the dropped files, not just blob URLs');
+}
+if (!/modelStampReviveDroppedAssetRecord/.test(droppedModelRestoreBody) || !/mergeModelStampAssets\(assets\)/.test(droppedModelRestoreBody) || !/scheduleModelStampRefresh\(asset\.id\)/.test(droppedModelRestoreBody)) {
+  fail('dropped GLB model stamps must restore saved files and refresh model-stamp cells after reload');
+}
 if (!/MUST use this exact modelStampId/.test(html) || !/function coerceAttachedModelStampsForGeneratedWorld/.test(html) || !/coerceAttachedModelStampsForGeneratedWorld\(data, dropAttachments\)/.test(html)) {
   fail('chat model attachments must enforce the exact dropped modelStampId before rendering');
 }
@@ -236,6 +338,10 @@ if (!fs.existsSync(islandSideStrataPath)) {
   if (!dims || dims.width !== 1024 || dims.height !== 192) {
     fail('island side edge strata texture must stay exactly 1024x192');
   }
+  const brown = pngBrownBandAverage(islandSideStrataPath);
+  if (!brown || brown.count < 80000 || brown.r > 124 || brown.r < 96 || brown.g > 78 || brown.g < 54 || brown.b < 28 || brown.b > 48) {
+    fail('island side edge strata brown band must match the darker soil-side greeble palette');
+  }
 }
 const islandSideStrataImageBody = sourceFunctionBody(html, 'createIslandSideStrataImageTexture');
 if (!/createIslandSideStrataImageTexture\('textures\/island-side-strata-gpt\.png'\)/.test(html) || !/new THREE\.CanvasTexture\(canvas\)/.test(islandSideStrataImageBody) || !/tex\.wrapS = THREE\.RepeatWrapping/.test(islandSideStrataImageBody) || !/tex\.wrapT = THREE\.ClampToEdgeWrapping/.test(islandSideStrataImageBody) || !/liftStrataCanvasShadows/.test(islandSideStrataImageBody)) {
@@ -248,6 +354,12 @@ if (!/baseMat\.isShaderMaterial/.test(islandShellMaterialBody) || !/shellMat\.un
 const islandStrataShaderBody = sourceFunctionBody(html, 'makeIslandSideStrataMaterial');
 if (!/col = max\(col, vec3\(0\.18, 0\.16, 0\.12\)\)/.test(islandStrataShaderBody)) {
   fail('island side edge shader must keep a brightness floor so generated textures cannot render black');
+}
+if (!/const ISLAND_SIDE_STRATA_TOP_OVERLAP = 0\.075/.test(html) || !/const ISLAND_SIDE_STRATA_RENDER_TOP_Y = ISLAND_SIDE_STRATA_TOP_Y \+ ISLAND_SIDE_STRATA_TOP_OVERLAP/.test(html) || !/const ISLAND_SIDE_STRATA_RENDER_HEIGHT = ISLAND_SIDE_STRATA_HEIGHT \+ ISLAND_SIDE_STRATA_TOP_OVERLAP/.test(html)) {
+  fail('island side edge strata must define a raised render top and full render height for the texture carrier');
+}
+if (!/uTopY: \{ value: ISLAND_SIDE_STRATA_RENDER_TOP_Y \}/.test(islandStrataShaderBody) || !/uHeight: \{ value: ISLAND_SIDE_STRATA_RENDER_HEIGHT \}/.test(islandStrataShaderBody) || !/uRepeatWidth: \{ value: ISLAND_SIDE_STRATA_RENDER_HEIGHT \* ISLAND_SIDE_STRATA_TEXTURE_ASPECT \}/.test(islandStrataShaderBody)) {
+  fail('island side edge shader must sample from the raised carrier top so the side texture meets the grass cap');
 }
 // The page hard-depends on its external stylesheet. A build that does not copy
 // styles/ into dist deploys an unstyled page (CSS 404 served as text/html), so
@@ -272,6 +384,14 @@ if (!/function addVoxelTerrainSurfaceDetails/.test(html) || !/addVoxelTerrainSur
 if (!/id="render-material-wear"/.test(html) || !/function applyWearToMaterialColor/.test(html) || !/renderMaterialWear/.test(html)) {
   fail('materials settings must expose and apply global wear-and-tear controls');
 }
+const pixelTextureBody = sourceFunctionBody(html, 'createPixelTexture');
+if (/const block = Math\.max\(44/.test(pixelTextureBody) || !/type === 'castle-block'/.test(pixelTextureBody) || !/const rowH = Math\.max\(7, Math\.floor\(scale \/ 8\)\)/.test(pixelTextureBody) || !/applyWorldUVs\(M\.wallCream, texCastleBlock, 0\.86\)/.test(html) || !/applyWorldUVs\(M\.towerStone, texCastleBlock, 0\.86\)/.test(html) || !/if \(kind === 'castle-block'\) return 0\.86/.test(html)) {
+  fail('default castle/stone wall texture must use tight masonry courses, not huge window-like block panels');
+}
+const materialBootBody = sourceFunctionBody(html, 'applyPersistedMaterialSettingsOnBoot');
+if (!/hasPersistedMaterialSettings\(\)/.test(materialBootBody) || !/commitPartMaterialAdjustments\(\)/.test(materialBootBody) || !/rebuildTerrainRender\(\)/.test(materialBootBody) || !/rebuildObjectsRender\(\)/.test(materialBootBody) || !/applyPersistedMaterialSettingsOnBoot\(\)/.test(html)) {
+  fail('persisted material wear/adjustments must be applied at late boot without needing slider movement');
+}
 if (!/function addVoxelTerrainRiserBacking/.test(html) || !/addVoxelTerrainRiserBacking\(g, terrain, riserSize, DIRT_H \+ rise/.test(html)) {
   fail('voxel terrain sides must include a solid backing behind detailed panels');
 }
@@ -280,6 +400,10 @@ if (/addVoxelTerrainRiser\(g, terrain, x, z, rise, riserSize, DIRT_H \+ rise/.te
 }
 if (!/function terrainSurfaceOffset/.test(html) || !/function addHeavyTerrainKerbStrips/.test(html) || !/addHeavyTerrainKerbStrips\(g, terrain, x, z, terrainN, topSize, topY\)/.test(html)) {
   fail('heavy terrain must render depressed surfaces with lightweight brick kerb strips');
+}
+const heavyTerrainKerbBody = sourceFunctionBody(html, 'addHeavyTerrainKerbStrips');
+if (!/!sameTerrainEdgeFamily\(terrainN\[dir\], terrain\)/.test(heavyTerrainKerbBody)) {
+  fail('heavy terrain kerb strips must only render on exposed paved edges, not across connected path/stone cells');
 }
 if (!/addVoxelTerrainTop\(g, terrain, x, z, visualRise - seamOverlap \* 0\.5/.test(html) || !/function terrainVisualRiseForCell/.test(html)) {
   fail('heavy terrain visual drop must drive tile tops and object/surface heights');
@@ -389,14 +513,20 @@ if (!/id="crowd-panel-handle"[^>]*data-feature-hidden="crowd-handle"/.test(htmlR
 if (!/Unified chrome icon buttons/.test(cssRaw) || !/\.token-corner \.btn\.icon\[data-pos-type\]/.test(cssRaw) || !/\.controls \.btn\.icon\[data-pos-type\]/.test(cssRaw) || !/\.language-trigger\[data-pos-type\]/.test(cssRaw) || !/\.sound-icon\[data-pos-type\]/.test(cssRaw) || !/\.layers-handle\[data-pos-type\]/.test(cssRaw) || !/\.world-pill\[data-pos-type\]/.test(cssRaw) || !/\.multiplayer-status\[data-pos-type\]/.test(cssRaw) || !/\.multiplayer-roster\[data-pos-type\]/.test(cssRaw) || !/\.mp-chat-toggle\[data-pos-type\]/.test(cssRaw)) {
   fail('language trigger, side rail controls, sound/layers, chat, and top pills must use the same category block-button chrome');
 }
+if (!/\.world-pill\[data-pos-type="primary"\]\s*\{[\s\S]*--chrome-bg:\s*rgba\(255, 255, 255, 0\.82\)[\s\S]*--chrome-hover-bg:\s*rgba\(255, 255, 255, 0\.94\)/.test(cssRaw)) {
+  fail('world selector pill must keep the bright white chrome fill instead of the tinted primary fill');
+}
 if (!/body\.ui-theme-dark \.controls \.btn\.icon\[data-pos-type\]\.on/.test(cssRaw) || !/body\.ui-theme-dark \.sound-icon\[data-pos-type\]\.open/.test(cssRaw) || !/body\.tod-night \.controls \.btn\.icon\[data-pos-type\]\.on/.test(cssRaw)) {
   fail('dark and after-hours themes must preserve chrome icon active/on block-button states');
 }
 if (!/\.world-menu-foot\s*\{[\s\S]*overflow-x:\s*auto/.test(cssRaw) || !/\.world-menu-foot-btn\s*\{[\s\S]*white-space:\s*nowrap/.test(cssRaw) || !/\.world-menu-foot-btn span\s*\{[\s\S]*text-overflow:\s*ellipsis/.test(cssRaw)) {
   fail('world menu footer buttons must stay single-line and use horizontal overflow instead of wrapping');
 }
-if (!/<div class="brand">[\s\S]*<\/div>\s*<a class="brand-banner" id="brand-banner"/.test(htmlRaw) || !/\.brand-banner\s*\{[\s\S]*top:\s*22px[\s\S]*left:\s*348px[\s\S]*right:\s*auto/.test(cssRaw)) {
-  fail('Autoincentive banner must sit next to the top-left logo instead of under the shared-room pill');
+if (!/<div class="brand">\s*<img class="brand-logo" src="assets\/twlogo-wordmark\.png" alt="Tiny World Builder" width="1064" height="403">\s*<\/div>\s*<a class="brand-banner" id="brand-banner"/.test(htmlRaw) || !/\.brand-logo\s*\{[\s\S]*width:\s*250px/.test(cssRaw) || !/\.brand-banner\s*\{[\s\S]*top:\s*28px[\s\S]*left:\s*294px[\s\S]*right:\s*auto/.test(cssRaw)) {
+  fail('top-left brand must use the logo-only Tiny World wordmark with the Autoincentive banner aligned beside it');
+}
+if (!fs.existsSync(path.join(root, 'assets', 'twlogo-wordmark.png'))) {
+  fail('top-left brand logo-only wordmark asset must exist');
 }
 if (/\.minimap-wrap\.collapsed\s*\{[^}]*translateX/.test(cssRaw) || !/function clampMinimapPosition\(left, top\)/.test(html) || !/function setMinimapPosition\(left, top\)[\s\S]*clampMinimapPosition\(left, top\)/.test(html) || !/setMinimapPosition\(mmDrag\.leftAtStart \+ dx, mmDrag\.topAtStart \+ dy\)/.test(html)) {
   fail('minimap must clamp restored/dragged/collapsed positions without translating off-screen');
@@ -433,15 +563,15 @@ if (!shippedCamera || !shippedCamera.target || shippedCamera.target.x !== 0 || s
 if (!/const RENDER_SETTINGS_VERSION = '24'/.test(html) || !/resolution:\s*'0\.75'/.test(html) || !/brightness:\s*'0\.80'/.test(html) || !/tiltBlur:\s*'10\.5'/.test(html)) {
   fail('hard-coded render defaults must match the shipped v24 defaults');
 }
-if (!/<div id="welcome-modal" class="modal launch-modal" hidden aria-hidden="true">[\s\S]*<img class="welcome-logo" src="assets\/twlogo\.png" alt="Tiny World Builder"[\s\S]*id="welcome-build"[^>]*>BUILD<\/button>[\s\S]*id="welcome-play"[^>]*>PLAY<\/button>/.test(htmlRaw)) {
-  fail('welcome launcher must render the Tiny World logo with BUILD and PLAY buttons');
+if (!/<div id="welcome-modal" class="modal launch-modal" hidden aria-hidden="true">[\s\S]*<img class="welcome-logo" src="assets\/twlogo\.png" alt="Tiny World Builder"[\s\S]*id="welcome-build"[^>]*>BUILD<\/button>[\s\S]*id="welcome-play"[^>]*>PLAY<\/button>[\s\S]*class="welcome-credit"[\s\S]*Created by Jason Kneen[\s\S]*https:\/\/x\.com\/jasonkneen[\s\S]*@jasonkneen[\s\S]*https:\/\/x\.com\/tinyworldsapp[\s\S]*@tinyworldsapp/.test(htmlRaw)) {
+  fail('welcome launcher must render the Tiny World logo, BUILD/PLAY buttons, creator credit, and social links');
 }
 const welcomeDialogBody = sourceFunctionBody(html, 'initWelcomeDialog');
 if (!/modal\.hidden = false;/.test(welcomeDialogBody) || !/welcome-launch-open/.test(welcomeDialogBody) || !/__tinyworldMode/.test(welcomeDialogBody) || !/chooseWelcomeMode\('build'\)/.test(welcomeDialogBody) || !/chooseWelcomeMode\('play'\)/.test(welcomeDialogBody)) {
   fail('welcome launcher must open at boot and route choices through Build/Play mode');
 }
-if (!/\.launch-modal\s*\{[\s\S]*align-items:\s*center/.test(cssRaw) || !/\.welcome-logo\s*\{[\s\S]*border-radius:\s*20px/.test(cssRaw) || !/\.welcome-mode-btn\s*\{[\s\S]*border:\s*1\.5px solid var\(--welcome-outline\)/.test(cssRaw)) {
-  fail('welcome launcher must be a centered rounded logo dialog with block-style mode buttons');
+if (!/\.launch-modal\s*\{[\s\S]*align-items:\s*center/.test(cssRaw) || !/\.welcome-logo\s*\{[\s\S]*border-radius:\s*20px/.test(cssRaw) || !/\.welcome-mode-btn\s*\{[\s\S]*border:\s*1\.5px solid var\(--welcome-outline\)/.test(cssRaw) || !/\.welcome-credit\s*\{[\s\S]*justify-content:\s*center/.test(cssRaw)) {
+  fail('welcome launcher must be a centered rounded logo dialog with block-style mode buttons and footer credit');
 }
 if (!fs.existsSync(path.join(root, 'assets', 'twlogo.png')) || !/if \[\[ -d assets \]\]/.test(publishRaw) || !/\$DIST\/assets/.test(publishRaw)) {
   fail('welcome launcher logo must be shipped through the assets publish path');
@@ -460,6 +590,9 @@ if (!/btn\.dataset\.posType = posType/.test(html) || !/close\.dataset\.posType =
 }
 if (!/\.radial-btn\[data-pos-type\]/.test(cssRaw) || !/border:\s*1\.5px solid var\(--radial-outline\)/.test(cssRaw) || !/body\.ui-theme-dark \.radial-btn\[data-pos-type\]/.test(cssRaw)) {
   fail('radial action buttons must keep circular toolbar-style category borders');
+}
+if (!/--radial-ink:\s*#143878/.test(cssRaw) || !/--radial-bg:\s*rgba\(232, 241, 255, 0\.96\)/.test(cssRaw) || !/color:\s*var\(--radial-ink\)/.test(cssRaw) || !/\.radial-btn\[data-pos-type\] \.radial-icon,\s*\.radial-btn\[data-pos-type\] \.radial-label/.test(cssRaw) || !/body\.ui-theme-dark \.radial-btn\[data-pos-type\] \.radial-label[\s\S]*color:\s*var\(--radial-ink\) !important/.test(cssRaw)) {
+  fail('radial action labels/icons must use high-contrast adaptive ink on opaque button fills');
 }
 if (!/fenceStyle/.test(html) || !/Garden/.test(html) || !/makeVoxelFenceSpan\(span\.side, span\.level, span\.length, span\.style\)/.test(html)) {
   fail('garden fences must preserve style through placement/rendering while keeping span batching');
@@ -522,6 +655,9 @@ if (!/islandShellMaterial\(M\.grass\)/.test(islandProxyBody) || !/islandShellMat
 const islandSideBackingBody = sourceFunctionBody(html, 'addIslandSideBacking');
 if (!/islandShellMaterial\(M\.(?:boardSide|boardSideEdge \|\| M\.boardSide)\)/.test(islandSideBackingBody) || !/skipTop: true, skipBottom: true/.test(islandSideBackingBody)) {
   fail('floating island side backing must keep a cheap double-sided wall behind edge greebles');
+}
+if (!/const wallTopY = ISLAND_SIDE_STRATA_RENDER_TOP_Y/.test(islandSideBackingBody) || !/const wallH = ISLAND_SIDE_STRATA_RENDER_HEIGHT/.test(islandSideBackingBody)) {
+  fail('floating island side backing must use the shared raised strata render bounds so the grass-cap edge does not show a sliver');
 }
 const prepareHomeBorderBody = sourceFunctionBody(html, 'prepareHomeBorderForRender');
 if (!/c\.frustumCulled = false/.test(prepareHomeBorderBody)) {

@@ -73,21 +73,29 @@ uniforms/source so the side-backing clone keeps the same coarse grid/strata
 shader instead of falling back to a black shell.
 
 Island edge strata is shader-driven on the side backing only:
-`addIslandSideBacking` uses the dedicated `M.boardSideEdge` shader material. Its
-top is anchored to `ISLAND_SIDE_STRATA_TOP_Y = TOP_H`, the visible top of the
-grass cap. The shader samples the fixed 1024x192 generated image slice
+`addIslandSideBacking` uses the dedicated `M.boardSideEdge` shader material. The
+logical grass-cap top is `ISLAND_SIDE_STRATA_TOP_Y = TOP_H`, but the visible
+carrier and shader sample top must both use
+`ISLAND_SIDE_STRATA_RENDER_TOP_Y` with `ISLAND_SIDE_STRATA_TOP_OVERLAP` so the
+bitmap rises into the cap and does not leave a thin rim. The shader samples the
+fixed 1024x192 generated image slice
 `textures/island-side-strata-gpt.png` through a `CanvasTexture` with a minimum
 shadow floor; do not load it as a raw `TextureLoader` image with ambiguous
 vertical flip, and do not let near-black pixels dominate the strip. The function
-uses that material on the real side-backing faces from `TOP_H` down through the
-dirt/stone side (`ISLAND_SIDE_STRATA_HEIGHT = TOP_H + DIRT_H + 0.035`). Do not
-add a separate shallow overlay strip over a plain brown backing; it leaves the
-old wall visible and looks like a decal. The four backing faces are widened by
-the edge outset so corners meet cleanly, and hidden faces stay stripped with
-`skipTop` / `skipBottom` / interior-side skips. Keep the side-carrier meshes out
-of static base merging so the shader stays inspectable and continues to sit
-behind the current edge greebles/lumps; do not add separate overlay panels or
-per-tile decal geometry for this effect.
+uses that material on the real side-backing faces from just above `TOP_H`
+(`ISLAND_SIDE_STRATA_TOP_OVERLAP`) down through the
+dirt/stone side (`ISLAND_SIDE_STRATA_RENDER_HEIGHT`). Do not add a separate
+shallow overlay strip over a plain brown backing; it leaves the old wall visible
+and looks like a decal. The four backing faces are widened by the edge outset so
+corners meet cleanly, and hidden faces stay stripped with `skipTop` /
+`skipBottom` / interior-side skips. Keep the side-carrier meshes out of static
+base merging so the shader stays inspectable and continues to sit behind the
+current edge greebles/lumps; do not add separate overlay panels or per-tile decal
+geometry for this effect.
+The dirt/brown band in `island-side-strata-gpt.png` should match the darker
+`soil-side`/`M.dirtRich` greeble palette, not bright orange. Keep the band near
+the dark brown family used by side greeble blocks so the bitmap and geometry
+read as one material.
 
 Underside pipes and water details are material-driven: `M.utilityPipe`,
 `M.utilityPipeD`, and `M.utilityClamp` use the internal `pipe-metal` canvas
@@ -162,8 +170,9 @@ surface-level white/cyan cloud in normal build/play views.
 The PNG/JPG ships inline as `AUTOINCENTIVE_BANNER_DATA_URL` (~41 KB base64
 JPEG) so there's no extra HTTP. Same data URL feeds:
 
-1. A fixed DOM banner next to the **top-left Tiny World logo/title** on wide
-   screens, dropping below the logo at medium widths and hiding on phone widths
+1. A fixed DOM banner next to the **top-left Tiny World wordmark**
+   (`assets/twlogo-wordmark.png`, logo-only crop with the island removed) on
+   wide screens, dropping below the logo at medium widths and hiding on phone widths
    (`<a id="brand-banner"><img id="brand-banner-img">`), src set by the
    `applyAutoincentiveSponsorLogo` IIFE. Clickable, opens
    `https://x.com/Autoincentiv3`. Hidden in showcase + XR via `.brand-banner`

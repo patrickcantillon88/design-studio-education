@@ -11,6 +11,12 @@ Most browser-local persisted user state lives in `localStorage` under the
 world saves, or per-viewport pixel positions in the shipped defaults file — see
 exclusion list below.
 
+Persisted render/material settings that affect shared Three materials must be
+re-applied during late boot, not only from control `input` handlers. In
+particular, material wear (`tinyworld:render:materialWear`) needs the
+`applyPersistedMaterialSettingsOnBoot()` pass so saved wear is visible on first
+render without toggling the slider.
+
 Cloud saves are separate from defaults/localStorage:
 
 - The account modal posts full TinyWorld JSON to Netlify Functions

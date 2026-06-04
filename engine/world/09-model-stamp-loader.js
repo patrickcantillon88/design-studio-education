@@ -1,6 +1,9 @@
   // -------- repo model stamp loader --------
   const MODEL_STAMP_MANIFEST_URL = 'models/stamp-manifest.json';
   const MODEL_STAMP_DEFAULTS_LS = 'tinyworld:model-stamp-defaults.v1';
+  const MODEL_STAMP_DROPPED_DB_NAME = 'tinyworld-model-stamps.v1';
+  const MODEL_STAMP_DROPPED_DB_VERSION = 1;
+  const MODEL_STAMP_DROPPED_STORE = 'dropped-model-files';
   const MODEL_STAMP_SUPPORTED_FORMATS = new Set(['glb', 'gltf', 'obj']);
   const MODEL_STAMP_DETECTED_FORMATS = new Set(['glb', 'gltf', 'obj', 'fbx']);
   const MODEL_STAMP_TEXTURE_FORMATS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif']);
@@ -11,6 +14,7 @@
   const modelStampAssetCache = new Map();
   const modelStampTextureCache = new Map();
   const modelStampDroppedObjectUrls = new Map();
+  let modelStampDroppedRestorePromise = null;
   let modelStampDracoLoader = null;
   let modelStampKtx2Loader = null;
   const CROWD_MODEL_CHARACTER_RE = /(character|person|people|human|man|woman|girl|boy|child|townie|avatar|npc|rig|skinned|walk|run|hitman|heisenberg)/i;
@@ -260,9 +264,55 @@
     return modelStampDroppedObjectUrls.get(key);
   }
 
-  function registerDroppedModelStampFiles(fileList) {
-    const files = Array.from(fileList || []).filter(file => file && typeof file.name === 'string');
-    if (!files.length) return [];
+  function modelStampOpenDroppedDb() {
+    if (typeof indexedDB === 'undefined') return Promise.reject(new Error('IndexedDB unavailable'));
+    return new Promise((resolve, reject) => {
+      let req = null;
+      try {
+        req = indexedDB.open(MODEL_STAMP_DROPPED_DB_NAME, MODEL_STAMP_DROPPED_DB_VERSION);
+      } catch (err) {
+        reject(err);
+        return;
+      }
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(MODEL_STAMP_DROPPED_STORE)) {
+          db.createObjectStore(MODEL_STAMP_DROPPED_STORE, { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error || new Error('Could not open dropped model store'));
+      req.onblocked = () => reject(new Error('Dropped model store upgrade blocked'));
+    });
+  }
+
+  function modelStampDroppedFileRecord(file) {
+    if (!file || typeof file.name !== 'string') return null;
+    return {
+      name: file.name,
+      type: String(file.type || ''),
+      size: Number(file.size) || 0,
+      lastModified: Number(file.lastModified) || Date.now(),
+      file,
+    };
+  }
+
+  function modelStampDroppedFileFromRecord(record) {
+    const src = record && (record.file || record.blob);
+    if (!src || typeof src !== 'object') return null;
+    const name = String(record.name || src.name || 'model.glb');
+    const lastModified = Number(record.lastModified || src.lastModified) || Date.now();
+    if (typeof File === 'function' && !(src instanceof File)) {
+      try {
+        return new File([src], name, { type: record.type || src.type || '', lastModified });
+      } catch (_) {}
+    }
+    try { if (!src.name) src.name = name; } catch (_) {}
+    try { if (!src.lastModified) src.lastModified = lastModified; } catch (_) {}
+    return src;
+  }
+
+  function modelStampBuildDroppedFileContext(files) {
     const localFiles = {};
     const sidecars = { textures: [], mtl: [] };
     const mains = [];
@@ -283,6 +333,132 @@
       else if (format === 'mtl') sidecars.mtl.push(record);
       else if (MODEL_STAMP_TEXTURE_FORMATS.has(format)) sidecars.textures.push(record);
     });
+    return { localFiles, sidecars, mains };
+  }
+
+  function modelStampSerializableDroppedAsset(asset) {
+    if (!asset || !asset.id) return null;
+    return {
+      id: asset.id,
+      label: asset.label,
+      name: asset.name || asset.label,
+      path: asset.path,
+      format: asset.format,
+      supported: asset.supported !== false,
+      size: Number(asset.size) || 0,
+      mtimeMs: Number(asset.mtimeMs) || 0,
+      warnings: Array.isArray(asset.warnings) ? asset.warnings.slice(0, 8) : [],
+    };
+  }
+
+  function persistDroppedModelStampAssets(assets, files) {
+    const cleanAssets = (assets || []).map(modelStampSerializableDroppedAsset).filter(Boolean);
+    const fileRecords = (files || []).map(modelStampDroppedFileRecord).filter(Boolean);
+    if (!cleanAssets.length || !fileRecords.length) return Promise.resolve([]);
+    return modelStampOpenDroppedDb()
+      .then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(MODEL_STAMP_DROPPED_STORE, 'readwrite');
+        const store = tx.objectStore(MODEL_STAMP_DROPPED_STORE);
+        const savedAt = Date.now();
+        cleanAssets.forEach(asset => {
+          store.put({
+            id: asset.id,
+            savedAt,
+            asset,
+            files: fileRecords,
+          });
+        });
+        tx.oncomplete = () => {
+          try { db.close(); } catch (_) {}
+          resolve(cleanAssets);
+        };
+        tx.onerror = () => {
+          try { db.close(); } catch (_) {}
+          reject(tx.error || new Error('Could not save dropped model files'));
+        };
+        tx.onabort = () => {
+          try { db.close(); } catch (_) {}
+          reject(tx.error || new Error('Dropped model save aborted'));
+        };
+      }))
+      .catch(err => {
+        console.warn('[model-stamp] could not persist dropped model files', err);
+        return [];
+      });
+  }
+
+  function modelStampReviveDroppedAssetRecord(record) {
+    const meta = record && record.asset && typeof record.asset === 'object' ? record.asset : record;
+    const id = modelStampIdSafe(meta && (meta.id || record.id));
+    if (!id) return null;
+    const files = Array.isArray(record.files)
+      ? record.files.map(modelStampDroppedFileFromRecord).filter(Boolean)
+      : [];
+    if (!files.length) return null;
+    const ctx = modelStampBuildDroppedFileContext(files);
+    const mainRef = modelStampFileBaseName(meta.path || meta.name || meta.label);
+    const main = ctx.mains.find(item => modelStampFileBaseName(item.file.name) === mainRef) || ctx.mains[0];
+    if (!main) return null;
+    const label = String(meta.label || meta.name || main.file.name || id).replace(/\.[^.]+$/, '').slice(0, 64) || id;
+    return {
+      id,
+      label,
+      name: label,
+      path: main.file.name,
+      url: main.url,
+      format: main.format,
+      supported: meta.supported !== false && MODEL_STAMP_SUPPORTED_FORMATS.has(main.format),
+      size: Number(meta.size) || main.file.size || 0,
+      mtimeMs: Number(meta.mtimeMs) || main.file.lastModified || Date.now(),
+      sidecars: ctx.sidecars,
+      dropped: true,
+      transient: false,
+      localFiles: ctx.localFiles,
+      warnings: Array.isArray(meta.warnings) ? meta.warnings.map(item => String(item || '').slice(0, 120)).filter(Boolean) : [],
+    };
+  }
+
+  function restorePersistedDroppedModelStamps() {
+    if (modelStampDroppedRestorePromise) return modelStampDroppedRestorePromise;
+    modelStampDroppedRestorePromise = modelStampOpenDroppedDb()
+      .then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(MODEL_STAMP_DROPPED_STORE, 'readonly');
+        const store = tx.objectStore(MODEL_STAMP_DROPPED_STORE);
+        const req = store.getAll();
+        req.onsuccess = () => {
+          try { db.close(); } catch (_) {}
+          resolve(Array.isArray(req.result) ? req.result : []);
+        };
+        req.onerror = () => {
+          try { db.close(); } catch (_) {}
+          reject(req.error || new Error('Could not restore dropped model files'));
+        };
+      }))
+      .then(records => {
+        const assets = records.map(modelStampReviveDroppedAssetRecord).filter(Boolean);
+        if (!assets.length) return [];
+        mergeModelStampAssets(assets);
+        modelStampScanMessage = 'Restored ' + assets.length + ' dropped model stamp' + (assets.length === 1 ? '' : 's');
+        updateStampBuilderSummary();
+        refreshOpenStampBuilderCards();
+        assets.forEach(asset => scheduleModelStampRefresh(asset.id));
+        if (typeof ensureCrowdModelCharacterAssetsLoading === 'function') ensureCrowdModelCharacterAssetsLoading();
+        return assets;
+      })
+      .catch(err => {
+        console.warn('[model-stamp] could not restore dropped model files', err);
+        return [];
+      });
+    return modelStampDroppedRestorePromise;
+  }
+
+  function registerDroppedModelStampFiles(fileList) {
+    const files = Array.from(fileList || []).filter(file => file && typeof file.name === 'string');
+    if (!files.length) return [];
+    const ctx = modelStampBuildDroppedFileContext(files);
+    const localFiles = ctx.localFiles;
+    const sidecars = ctx.sidecars;
+    const mains = ctx.mains;
     const batchId = Date.now().toString(36);
     const assets = mains.map((main, index) => {
       const slug = modelStampSlug(main.file.name);
@@ -313,6 +489,7 @@
     }).filter(Boolean);
     if (!assets.length) return [];
     mergeModelStampAssets(assets);
+    persistDroppedModelStampAssets(assets, files);
     modelStampScanMessage = 'Imported ' + assets.length + ' dropped model' + (assets.length === 1 ? '' : 's');
     updateStampBuilderSummary();
     refreshOpenStampBuilderCards();
@@ -368,7 +545,7 @@
     }
     updateStampBuilderSummary();
     refreshOpenStampBuilderCards();
-    ensureCrowdModelCharacterAssetsLoading();
+    if (typeof ensureCrowdModelCharacterAssetsLoading === 'function') ensureCrowdModelCharacterAssetsLoading();
     return MODEL_STAMP_ASSETS;
   }
 
@@ -1223,6 +1400,7 @@
   }
 
   window.__tinyworldRegisterDroppedModelStamps = registerDroppedModelStampFiles;
+  window.__tinyworldRestoreDroppedModelStamps = restorePersistedDroppedModelStamps;
   window.__tinyworldPreloadModelStamp = function preloadModelStamp(id, callbacks = {}) {
     const asset = getModelStamp(id);
     if (!asset) return null;
@@ -1264,6 +1442,8 @@
       refreshOpenStampBuilderCards();
     }, 0);
   }
+
+  restorePersistedDroppedModelStamps();
 
   function syncModelStampSettingsPanel(tool) {
     const panel = document.getElementById('model-stamp-settings');
