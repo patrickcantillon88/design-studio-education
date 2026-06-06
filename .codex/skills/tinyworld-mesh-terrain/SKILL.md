@@ -21,12 +21,20 @@ terrain instead of baking into per-tile `setCell`.
 - Render (`rebuildGeometry`): each voxel writes a flat **top quad** at its height
   plus **vertical step-walls** only on edges where a neighbour (or the board
   boundary) is lower. Boundary walls drop to a base skirt below the lowest block.
-  Fixed stride `FLOATS_PER_VOXEL = 90` (top + 4 walls); absent walls are written
-  as degenerate (zeroed) triangles so the buffer never reallocates. Walls are
-  shaded `WALL_SHADE` darker than the top for depth. Non-indexed +
-  `MeshLambertMaterial({vertexColors, flatShading, side:DoubleSide})`.
-- The geometry rebuild runs on every edit, so it writes from **scalars** via
-  `quad()`/`wv()` (no per-quad array allocation) to avoid GC churn.
+  Geometry is non-indexed; the rebuild runs on every edit, so it writes from
+  **scalars** via `quad()`/`wv()` (no per-quad array allocation).
+- Materials use the app's REAL terrain shaders. The geometry is laid out grouped
+  by terrain (all tops, then all sides) and `surfaceMesh.material` is a parallel
+  array: tops get `terrainVoxelMaterials(t).base`, sides get
+  `terrainRiserMaterial(t)` (the soil/stone risers). Those materials compute UVs
+  from world position in-shader (`applyWorldUVs` `onBeforeCompile`), so the blocks
+  pick up the same textures/shading as the rest of the world — **do not** hand-roll
+  UVs. Materials are used via double-sided clones (`dsClone`) that copy
+  `onBeforeCompile`/`userData`/`customProgramCacheKey` across (r128
+  `Material.clone` drops `onBeforeCompile`), cached by uuid so there is no
+  per-frame churn; clones are disposed on teardown. If `M`/`terrainVoxelMaterials`/
+  `terrainRiserMaterial` are missing, it falls back to a single vertex-coloured
+  `flatShading` mesh (fixed per-voxel stride + degenerate fill for absent walls).
 
 ## Sculpt / paint
 
@@ -77,7 +85,11 @@ terrain instead of baking into per-tile `setCell`.
 - Open the editor: a flat grid of grass blocks covers the board; flat tiles hide.
 - Sculpt drag raises/lowers **flat-topped blocks** with vertical step-walls —
   no sloped/curved surfaces; neighbours taper with the brush.
-- Paint lays materials per voxel; walls read slightly darker than tops.
+- Tops use the real terrain textures/shaders (grass, water flow, stone masonry,
+  etc.); side walls use the soil/stone riser materials. If they render as flat
+  plain colours, the real-material wiring fell through to the fallback — check
+  `M`/`terrainVoxelMaterials`/`terrainRiserMaterial` are defined at open time.
+- Paint lays materials per voxel.
 - Orbit/zoom still work on empty-space drag / scroll; toolbar clicks not hijacked.
 - Apply keeps the blocks (no full tiles reappear); reload restores them.
 - Cancel reverts; Remove deletes the blocks and restores the flat tiles.

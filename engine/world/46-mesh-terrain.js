@@ -7,6 +7,13 @@
   // layout — never a smooth/curved surface. Pulling one voxel up drags its
   // neighbours up too, with a smoothstep "tension" falloff over the brush.
   //
+  // Rendering uses the app's REAL terrain materials/shaders (via
+  // terrainVoxelMaterials/terrainRiserMaterial), grouped per terrain: tops get
+  // the terrain base material, side walls get the soil/stone riser material.
+  // Those materials compute their UVs from world position in-shader
+  // (applyWorldUVs), so the blocks pick up the same textures/shading as the rest
+  // of the world. A plain-colour fallback is used if those helpers are missing.
+  //
   // "Apply" keeps the block mesh as the rendered terrain (persisted under its own
   // localStorage key) and hides the underlying flat home tiles — it does NOT bake
   // back into per-tile terrain, so there are no full tiles afterwards.
@@ -20,10 +27,8 @@
     const MAX_N = 96;            // hard cap on voxels-per-side across the board
     const VPT_OPTIONS = [4, 6, 8, 10];
     const FLOATS_PER_VOXEL = 90; // top quad + 4 wall quads, 2 tris each, 3 verts, 3 floats
-    const WALL_SHADE = 0.78;     // side walls a touch darker than the top
     const BASE_SKIRT = 0.25;     // how far boundary walls drop below the lowest block
 
-    // Editor palette. ids match real terrain names.
     const MATERIALS = [
       { id: 'grass', label: 'Grass', color: 0x6fae4f },
       { id: 'sand',  label: 'Sand',  color: 0xe2cf95 },
@@ -36,17 +41,17 @@
 
     // ---- editor prefs ----
     let vpt = 8;
-    let toolMode = 'sculpt';     // 'sculpt' | 'paint'
+    let toolMode = 'sculpt';
     let paintMatIndex = 0;
-    let brushRadius = 1.5;       // world units (tiles)
+    let brushRadius = 1.5;
 
     // ---- session state ----
-    let editing = false;         // pointer handlers attached, brush shown
-    let applied = false;         // a committed block design is being displayed
+    let editing = false;
+    let applied = false;
     let gridAtEnter = 8;
     let half = 4;
-    let N = 0;                   // voxels per side across the whole board
-    let spacing = 1;             // world units per voxel = TILE / effVpt
+    let N = 0;
+    let spacing = 1;
     let surfaceY = 0.18;
 
     let cellH = null;            // Float32Array(N*N) per-voxel top height delta
@@ -54,9 +59,14 @@
     let positions = null, colors = null, normals = null;
 
     let surfaceMesh = null, brushRing = null, grabHandle = null, geom = null;
-    let ray = null;
-    let drag = null;             // { kind, i0, j0, startClientY, perPixel, startH }
-    let tmpColor = null;
+    let ray = null, drag = null, tmpColor = null;
+
+    // ---- real-material wiring ----
+    let useRealMats = false;
+    const termTopOrig = new Map();   // terrainIndex -> app top material (or null)
+    const termSideOrig = new Map();  // terrainIndex -> app riser material (or null)
+    const matClones = new Map();     // orig.uuid -> double-sided clone
+    const solidFallback = new Map(); // key -> plain MeshLambertMaterial
 
     // ---- DOM ----
     let toggleBtn = null, panel = null, builtUI = false;
@@ -80,7 +90,7 @@
       try { localStorage.setItem(PREF_KEY, JSON.stringify({ vpt, toolMode, brushRadius, paintMatIndex })); } catch (_) {}
     }
 
-    // ---- design persistence (its own key; world schema untouched) ----
+    // ---- design persistence (own key; world schema untouched) ----
     function saveDesign() {
       if (!cellH || !mats) return;
       try {
@@ -90,18 +100,13 @@
         }));
       } catch (_) {}
     }
-    function readDesign() {
-      try { return JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (_) { return null; }
-    }
+    function readDesign() { try { return JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (_) { return null; } }
     function clearDesign() { try { localStorage.removeItem(STORE_KEY); } catch (_) {} }
-
     function loadDesignInto(d) {
       if (!d || d.gridSize !== gridAtEnter || d.vpt !== vpt) return false;
       if (!Array.isArray(d.cellH) || d.cellH.length !== cellH.length) return false;
       if (!Array.isArray(d.mats) || d.mats.length !== mats.length) return false;
-      cellH.set(d.cellH);
-      mats.set(d.mats);
-      return true;
+      cellH.set(d.cellH); mats.set(d.mats); return true;
     }
 
     // ---- sizing / buffers ----
@@ -128,14 +133,68 @@
       return tmpColor;
     }
 
-    // Write one vertex (position + normal + color) at float offset `o`.
+    // ---- material selection (real app terrain materials) ----
+    function detectRealMats() {
+      useRealMats = (typeof M !== 'undefined' && typeof terrainVoxelMaterials === 'function' && typeof terrainRiserMaterial === 'function');
+    }
+    function topOrig(t) {
+      if (termTopOrig.has(t)) return termTopOrig.get(t);
+      let m = null;
+      try { const tv = terrainVoxelMaterials(MATERIALS[t].id); m = (tv && tv.base) || null; } catch (_) { m = null; }
+      termTopOrig.set(t, m); return m;
+    }
+    function sideOrig(t) {
+      if (termSideOrig.has(t)) return termSideOrig.get(t);
+      let m = null;
+      try {
+        m = terrainRiserMaterial(MATERIALS[t].id) || null;
+        if (!m) { const tv = terrainVoxelMaterials(MATERIALS[t].id); m = (tv && tv.low) || null; }
+      } catch (_) { m = null; }
+      termSideOrig.set(t, m); return m;
+    }
+    // Double-sided clone that preserves the world-UV shader (onBeforeCompile is
+    // NOT copied by Material.clone in r128, so copy it across explicitly).
+    function dsClone(orig) {
+      if (!orig) return null;
+      let c = matClones.get(orig.uuid);
+      if (c) return c;
+      c = orig.clone();
+      c.onBeforeCompile = orig.onBeforeCompile;
+      if (typeof orig.customProgramCacheKey === 'function') c.customProgramCacheKey = orig.customProgramCacheKey;
+      c.userData = Object.assign({}, orig.userData);
+      c.side = THREE.DoubleSide;
+      c.needsUpdate = true;
+      matClones.set(orig.uuid, c);
+      return c;
+    }
+    function solidMat(key, hex) {
+      let m = solidFallback.get(key);
+      if (m) return m;
+      m = new THREE.MeshLambertMaterial({ color: hex, side: THREE.DoubleSide });
+      solidFallback.set(key, m);
+      return m;
+    }
+    function topMatReady(t) {
+      if (useRealMats) { const c = dsClone(topOrig(t)); if (c) return c; }
+      return solidMat('t' + t, MATERIALS[t].color);
+    }
+    function sideMatReady(t) {
+      if (useRealMats) { const c = dsClone(sideOrig(t)); if (c) return c; }
+      const c = new THREE.Color(MATERIALS[t].color); c.multiplyScalar(0.7);
+      return solidMat('s' + t, c.getHex());
+    }
+    function disposeMatCaches() {
+      for (const c of matClones.values()) { try { c.dispose(); } catch (_) {} }
+      for (const c of solidFallback.values()) { try { c.dispose(); } catch (_) {} }
+      matClones.clear(); solidFallback.clear(); termTopOrig.clear(); termSideOrig.clear();
+    }
+
+    // ---- low-level vertex/quad writers (scalars only -> no per-call alloc) ----
     function wv(o, x, y, z, nx, ny, nz, r, g, b) {
       positions[o] = x; positions[o + 1] = y; positions[o + 2] = z;
       normals[o] = nx; normals[o + 1] = ny; normals[o + 2] = nz;
       colors[o] = r; colors[o + 1] = g; colors[o + 2] = b;
     }
-    // Write one quad (2 triangles a-b-c, a-c-d) from scalar corners — no
-    // per-call array allocation, since this runs for every voxel on each edit.
     function quad(o, ax, ay, az, bx, by, bz, cx, cy, cz, dx, dy, dz, nx, ny, nz, r, g, b) {
       wv(o, ax, ay, az, nx, ny, nz, r, g, b);
       wv(o + 3, bx, by, bz, nx, ny, nz, r, g, b);
@@ -144,17 +203,83 @@
       wv(o + 12, cx, cy, cz, nx, ny, nz, r, g, b);
       wv(o + 15, dx, dy, dz, nx, ny, nz, r, g, b);
     }
-    function writeDegenerate(o) {
-      for (let k = 0; k < 18; k++) positions[o + k] = 0;
-    }
 
-    // Rebuild the whole block mesh from cellH + mats: each voxel = flat top + the
-    // vertical walls needed where a neighbour (or the board edge) is lower.
-    function rebuildGeometry() {
+    function presentTerrains() {
+      const seen = new Uint8Array(MATERIALS.length);
+      const out = [];
+      for (let k = 0; k < mats.length; k++) if (!seen[mats[k]]) { seen[mats[k]] = 1; out.push(mats[k]); }
+      out.sort((a, b) => a - b);
+      return out;
+    }
+    function baseLevelY() {
       let gmin = Infinity;
       for (let k = 0; k < cellH.length; k++) if (cellH[k] < gmin) gmin = cellH[k];
       if (!isFinite(gmin)) gmin = 0;
-      const baseY = surfaceY + Math.min(0, gmin) - BASE_SKIRT;
+      return surfaceY + Math.min(0, gmin) - BASE_SKIRT;
+    }
+
+    // Rebuild the block mesh. Real-material path lays voxels out grouped by
+    // terrain (tops, then sides) so each group draws with the right shader.
+    function rebuildGeometry() {
+      const baseY = baseLevelY();
+      if (!useRealMats) { rebuildVertexColored(baseY); return; }
+
+      const present = presentTerrains();
+      const matList = [];
+      const groups = [];
+      let fo = 0; // float cursor
+
+      // tops
+      for (const t of present) {
+        const vStart = fo / 3;
+        for (let j = 0; j < N; j++) {
+          const z0 = j * spacing - half, z1 = (j + 1) * spacing - half;
+          for (let i = 0; i < N; i++) {
+            const idx = j * N + i; if (mats[idx] !== t) continue;
+            const x0 = i * spacing - half, x1 = (i + 1) * spacing - half;
+            const topY = surfaceY + cellH[idx];
+            const c = matColor(t);
+            quad(fo, x0, topY, z0, x0, topY, z1, x1, topY, z1, x1, topY, z0, 0, 1, 0, c.r, c.g, c.b);
+            fo += 18;
+          }
+        }
+        const count = fo / 3 - vStart;
+        if (count > 0) { matList.push(topMatReady(t)); groups.push([vStart, count, matList.length - 1]); }
+      }
+      // sides
+      for (const t of present) {
+        const vStart = fo / 3;
+        for (let j = 0; j < N; j++) {
+          const z0 = j * spacing - half, z1 = (j + 1) * spacing - half;
+          for (let i = 0; i < N; i++) {
+            const idx = j * N + i; if (mats[idx] !== t) continue;
+            const x0 = i * spacing - half, x1 = (i + 1) * spacing - half;
+            const topY = surfaceY + cellH[idx];
+            const c = matColor(t);
+            const nE = (i + 1 < N) ? surfaceY + cellH[idx + 1] : baseY;
+            if (topY > nE + 1e-6) { quad(fo, x1, nE, z0, x1, nE, z1, x1, topY, z1, x1, topY, z0, 1, 0, 0, c.r, c.g, c.b); fo += 18; }
+            const nW = (i - 1 >= 0) ? surfaceY + cellH[idx - 1] : baseY;
+            if (topY > nW + 1e-6) { quad(fo, x0, nW, z1, x0, nW, z0, x0, topY, z0, x0, topY, z1, -1, 0, 0, c.r, c.g, c.b); fo += 18; }
+            const nS = (j + 1 < N) ? surfaceY + cellH[idx + N] : baseY;
+            if (topY > nS + 1e-6) { quad(fo, x0, nS, z1, x1, nS, z1, x1, topY, z1, x0, topY, z1, 0, 0, 1, c.r, c.g, c.b); fo += 18; }
+            const nN = (j - 1 >= 0) ? surfaceY + cellH[idx - N] : baseY;
+            if (topY > nN + 1e-6) { quad(fo, x1, nN, z0, x0, nN, z0, x0, topY, z0, x1, topY, z0, 0, 0, -1, c.r, c.g, c.b); fo += 18; }
+          }
+        }
+        const count = fo / 3 - vStart;
+        if (count > 0) { matList.push(sideMatReady(t)); groups.push([vStart, count, matList.length - 1]); }
+      }
+
+      geom.clearGroups();
+      for (const g of groups) geom.addGroup(g[0], g[1], g[2]);
+      geom.setDrawRange(0, fo / 3);
+      surfaceMesh.material = matList.length ? matList : [solidMat('empty', 0x6fae4f)];
+      geom.attributes.position.needsUpdate = true;
+      geom.attributes.normal.needsUpdate = true;
+    }
+
+    // Fallback: single vertex-coloured flat-shaded mesh (fixed per-voxel stride).
+    function rebuildVertexColored(baseY) {
       for (let j = 0; j < N; j++) {
         const z0 = j * spacing - half, z1 = (j + 1) * spacing - half;
         for (let i = 0; i < N; i++) {
@@ -163,52 +288,43 @@
           const topY = surfaceY + cellH[idx];
           const c = matColor(mats[idx]);
           const cr = c.r, cg = c.g, cb = c.b;
-          const wr = cr * WALL_SHADE, wg = cg * WALL_SHADE, wb = cb * WALL_SHADE;
+          const wr = cr * 0.78, wg = cg * 0.78, wb = cb * 0.78;
           let o = idx * FLOATS_PER_VOXEL;
-          // flat top
           quad(o, x0, topY, z0, x0, topY, z1, x1, topY, z1, x1, topY, z0, 0, 1, 0, cr, cg, cb); o += 18;
-          // east wall (x = x1)
           const nE = (i + 1 < N) ? surfaceY + cellH[idx + 1] : baseY;
           if (topY > nE + 1e-6) quad(o, x1, nE, z0, x1, nE, z1, x1, topY, z1, x1, topY, z0, 1, 0, 0, wr, wg, wb); else writeDegenerate(o); o += 18;
-          // west wall (x = x0)
           const nW = (i - 1 >= 0) ? surfaceY + cellH[idx - 1] : baseY;
           if (topY > nW + 1e-6) quad(o, x0, nW, z1, x0, nW, z0, x0, topY, z0, x0, topY, z1, -1, 0, 0, wr, wg, wb); else writeDegenerate(o); o += 18;
-          // south wall (z = z1)
           const nS = (j + 1 < N) ? surfaceY + cellH[idx + N] : baseY;
           if (topY > nS + 1e-6) quad(o, x0, nS, z1, x1, nS, z1, x1, topY, z1, x0, topY, z1, 0, 0, 1, wr, wg, wb); else writeDegenerate(o); o += 18;
-          // north wall (z = z0)
           const nN = (j - 1 >= 0) ? surfaceY + cellH[idx - N] : baseY;
           if (topY > nN + 1e-6) quad(o, x1, nN, z0, x0, nN, z0, x0, topY, z0, x1, topY, z0, 0, 0, -1, wr, wg, wb); else writeDegenerate(o); o += 18;
         }
       }
-      if (geom) {
-        geom.attributes.position.needsUpdate = true;
-        geom.attributes.color.needsUpdate = true;
-        geom.attributes.normal.needsUpdate = true;
-      }
+      geom.attributes.position.needsUpdate = true;
+      geom.attributes.normal.needsUpdate = true;
+      if (geom.attributes.color) geom.attributes.color.needsUpdate = true;
     }
+    function writeDegenerate(o) { for (let k = 0; k < 18; k++) positions[o + k] = 0; }
 
-    function buildMesh() {
-      allocBuffers();
-    }
-    function buildMeshMeshes() {
-      rebuildGeometry();
+    function buildSceneMeshes() {
+      detectRealMats();
       geom = new THREE.BufferGeometry();
       geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
       geom.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+      if (!useRealMats) geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
       geom.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, surfaceY, 0), gridAtEnter * 1.1 + 80);
-      const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
-      surfaceMesh = new THREE.Mesh(geom, mat);
+      const initialMat = useRealMats ? [] : new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
+      surfaceMesh = new THREE.Mesh(geom, initialMat);
       surfaceMesh.userData = { kind: 'mesh-terrain-surface' };
       surfaceMesh.renderOrder = 1;
       scene.add(surfaceMesh);
+      rebuildGeometry();
 
       const ringGeo = new THREE.RingGeometry(0.9, 1.0, 48);
       ringGeo.rotateX(-Math.PI / 2);
       brushRing = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffe27a, transparent: true, opacity: 0.85, depthTest: false, side: THREE.DoubleSide }));
       brushRing.renderOrder = 30; brushRing.visible = false; scene.add(brushRing);
-
       grabHandle = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), new THREE.MeshBasicMaterial({ color: 0xfff2c4, depthTest: false }));
       grabHandle.renderOrder = 31; grabHandle.visible = false; scene.add(grabHandle);
     }
@@ -217,9 +333,10 @@
         if (!m) continue;
         scene.remove(m);
         if (m.geometry) m.geometry.dispose();
-        if (m.material) m.material.dispose();
+        if (m.material && !Array.isArray(m.material)) m.material.dispose();
       }
       surfaceMesh = brushRing = grabHandle = geom = null;
+      disposeMatCaches();
     }
 
     // ---- picking ----
@@ -235,10 +352,7 @@
       return hits.length ? hits[0].point : null;
     }
     function voxelAt(point) {
-      return {
-        i: clamp(Math.floor((point.x + half) / spacing), 0, N - 1),
-        j: clamp(Math.floor((point.z + half) / spacing), 0, N - 1),
-      };
+      return { i: clamp(Math.floor((point.x + half) / spacing), 0, N - 1), j: clamp(Math.floor((point.z + half) / spacing), 0, N - 1) };
     }
     function voxelCenter(i, j) { return { x: (i + 0.5) * spacing - half, z: (j + 0.5) * spacing - half }; }
     function falloff(d) { const t = 1 - d / brushRadius; return t <= 0 ? 0 : t * t * (3 - 2 * t); }
@@ -267,8 +381,7 @@
           const ctr = voxelCenter(i, j);
           const w = falloff(Math.hypot(ctr.x - gc.x, ctr.z - gc.z));
           if (w <= 0) continue;
-          const idx = j * N + i;
-          cellH[idx] = drag.startH[idx] + worldDy * w;
+          cellH[j * N + i] = drag.startH[j * N + i] + worldDy * w;
         }
       }
       rebuildGeometry();
@@ -301,10 +414,10 @@
     function inPanel(t) { return (panel && panel.contains(t)) || (toggleBtn && toggleBtn.contains(t)); }
     function onDown(e) {
       if (!editing || inPanel(e.target)) return;
-      if (e.target !== renderer.domElement) return; // never hijack chrome clicks
+      if (e.target !== renderer.domElement) return;
       if (e.button !== 0) return;
       const point = raycastSurface(e.clientX, e.clientY);
-      if (!point) return; // missed surface -> let the camera orbit
+      if (!point) return;
       e.stopPropagation(); e.preventDefault();
       try { renderer.domElement.setPointerCapture(e.pointerId); } catch (_) {}
       if (toolMode === 'sculpt') {
@@ -367,7 +480,6 @@
       }
     }
     function applyDisplayHiding() { if (shown()) setHomeMeshesVisible(false); }
-
     function repaint() { if (typeof renderScene === 'function') { try { renderScene(); } catch (_) {} } }
 
     // ---- open / commit / cancel / remove ----
@@ -376,10 +488,10 @@
       if (typeof scene === 'undefined' || typeof camera === 'undefined' || typeof renderer === 'undefined') return;
       if (!shown()) {
         recomputeDims();
-        buildMesh();
+        allocBuffers();
         const d = readDesign();
         if (d) { applied = !!d.applied; if (!loadDesignInto(d)) applied = false; }
-        buildMeshMeshes();
+        buildSceneMeshes();
       }
       setHomeMeshesVisible(false);
       attachPointer();
@@ -390,62 +502,43 @@
       repaint();
     }
     function leaveEditOnly() {
-      detachPointer();
-      drag = null;
-      hideBrush();
+      detachPointer(); drag = null; hideBrush();
       editing = false;
       document.body.classList.remove('mesh-terrain-active');
       if (panel) panel.hidden = true;
       if (toggleBtn) toggleBtn.setAttribute('aria-pressed', 'false');
     }
     function applyDesign() {
-      // Keep the block terrain displayed; persist it. No bake into world tiles.
-      applied = true;
-      saveDesign();
+      applied = true; saveDesign();
       setHomeMeshesVisible(false);
-      leaveEditOnly();
-      repaint();
+      leaveEditOnly(); repaint();
     }
     function cancelEdit() {
       const d = readDesign();
       if (d && d.applied && d.gridSize === gridAtEnter && d.vpt === vpt && loadDesignInto(d)) {
-        // revert to the last applied design and keep it displayed
-        applied = true;
-        rebuildGeometry();
-        setHomeMeshesVisible(false);
-        leaveEditOnly();
+        applied = true; rebuildGeometry(); setHomeMeshesVisible(false); leaveEditOnly();
       } else {
-        // nothing committed -> tear the editor down and restore the flat tiles
-        leaveEditOnly();
-        disposeMeshes();
+        leaveEditOnly(); disposeMeshes();
         cellH = mats = positions = colors = normals = null;
-        setHomeMeshesVisible(true);
-        applied = false;
+        setHomeMeshesVisible(true); applied = false;
       }
       repaint();
     }
     function removeDesign() {
-      leaveEditOnly();
-      disposeMeshes();
+      leaveEditOnly(); disposeMeshes();
       cellH = mats = positions = colors = normals = null;
-      setHomeMeshesVisible(true);
-      applied = false;
-      clearDesign();
-      repaint();
+      setHomeMeshesVisible(true); applied = false; clearDesign(); repaint();
     }
     function flatten() {
       if (!cellH) return;
-      cellH.fill(0); mats.fill(0);
-      rebuildGeometry();
-      saveDesign();
+      cellH.fill(0); mats.fill(0); rebuildGeometry(); saveDesign();
     }
 
     function changeResolution(newVpt) {
       if (!VPT_OPTIONS.includes(newVpt) || newVpt === vpt) return;
       const oldN = N, oldH = cellH, oldM = mats, oldGrid = gridAtEnter, wasShown = shown();
       vpt = newVpt; savePrefs();
-      recomputeDims();
-      allocBuffers();
+      recomputeDims(); allocBuffers();
       if (oldH && oldGrid === gridAtEnter) {
         for (let j = 0; j < N; j++) {
           for (let i = 0; i < N; i++) {
@@ -456,26 +549,21 @@
           }
         }
       }
-      if (wasShown) { disposeMeshes(); buildMeshMeshes(); }
-      saveDesign();
-      repaint();
+      if (wasShown) { disposeMeshes(); buildSceneMeshes(); }
+      saveDesign(); repaint();
     }
 
-    // ---- boot-time restore of an applied design ----
     function restoreApplied() {
       const d = readDesign();
-      if (!d || !d.applied) return;
-      if (typeof GRID !== 'number') return;
+      if (!d || !d.applied || typeof GRID !== 'number') return;
       gridAtEnter = GRID;
       if (d.gridSize !== gridAtEnter) return;
       if (VPT_OPTIONS.includes(d.vpt)) vpt = d.vpt;
-      recomputeDims();
-      buildMesh();
+      recomputeDims(); allocBuffers();
       if (!loadDesignInto(d)) return;
       applied = true;
-      buildMeshMeshes();
+      buildSceneMeshes();
       setHomeMeshesVisible(false);
-      // The world tiles may render slightly after us; re-hide a couple of times.
       setTimeout(applyDisplayHiding, 600);
       setTimeout(applyDisplayHiding, 1800);
       repaint();
