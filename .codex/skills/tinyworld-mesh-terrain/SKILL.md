@@ -14,7 +14,9 @@ terrain instead of baking into per-tile `setCell`.
 ## The model is per-voxel blocks (not a smooth heightfield)
 
 - `cellH`: `Float32Array(N*N)` — the flat-top height of **each voxel**. There are
-  no shared/interpolated vertices, so tops never slope into curves.
+  no shared/interpolated vertices, so tops never slope into curves. Sculpting
+  clamps `cellH` to `[0, MAX_HEIGHT]` — ground (0) is the floor, so you build up
+  from the ground and cannot dig below it.
 - `mats`: `Uint8Array(N*N)` — per-voxel material index into `MATERIALS`
   (ids match real terrain names: grass/sand/water/stone/dirt/snow/lava).
 - `N = GRID * effVpt` voxels per side; `effVpt` is clamped so `N <= MAX_N` (96).
@@ -26,7 +28,9 @@ terrain instead of baking into per-tile `setCell`.
 - Materials use the app's REAL terrain shaders. The geometry is laid out grouped
   by terrain (all tops, then all sides) and `surfaceMesh.material` is a parallel
   array: tops get `terrainVoxelMaterials(t).base`, sides get
-  `terrainRiserMaterial(t)` (the soil/stone risers). Those materials compute UVs
+  `terrainRiserMaterial(t)` (the soil/stone risers). Exception: `stone` uses the
+  natural grainy rock material (`M.rock` tops / `M.rockDk` sides, `texStone` @4×)
+  instead of the cottage/masonry brick finish, so it reads as rock, not walls. Those materials compute UVs
   from world position in-shader (`applyWorldUVs` `onBeforeCompile`), so the blocks
   pick up the same textures/shading as the rest of the world — **do not** hand-roll
   UVs. Materials are used via double-sided clones (`dsClone`) that copy

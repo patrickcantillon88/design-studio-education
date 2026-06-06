@@ -28,6 +28,9 @@
     const VPT_OPTIONS = [4, 6, 8, 10];
     const FLOATS_PER_VOXEL = 90; // top quad + 4 wall quads, 2 tris each, 3 verts, 3 floats
     const BASE_SKIRT = 0.25;     // how far boundary walls drop below the lowest block
+    const MAX_HEIGHT = 40;       // cap on how high a voxel can be pulled
+    // Ground level is the floor: voxels cannot be pushed below 0 (no digging
+    // below the ground), only built up from it.
 
     const MATERIALS = [
       { id: 'grass', label: 'Grass', color: 0x6fae4f },
@@ -140,15 +143,23 @@
     function topOrig(t) {
       if (termTopOrig.has(t)) return termTopOrig.get(t);
       let m = null;
-      try { const tv = terrainVoxelMaterials(MATERIALS[t].id); m = (tv && tv.base) || null; } catch (_) { m = null; }
+      try {
+        // Stone uses the natural grainy rock material (texStone @4x), not the
+        // cottage/masonry brick finish, so it reads as rock rather than walls.
+        if (MATERIALS[t].id === 'stone' && typeof M !== 'undefined' && M.rock) m = M.rock;
+        else { const tv = terrainVoxelMaterials(MATERIALS[t].id); m = (tv && tv.base) || null; }
+      } catch (_) { m = null; }
       termTopOrig.set(t, m); return m;
     }
     function sideOrig(t) {
       if (termSideOrig.has(t)) return termSideOrig.get(t);
       let m = null;
       try {
-        m = terrainRiserMaterial(MATERIALS[t].id) || null;
-        if (!m) { const tv = terrainVoxelMaterials(MATERIALS[t].id); m = (tv && tv.low) || null; }
+        if (MATERIALS[t].id === 'stone' && typeof M !== 'undefined' && (M.rockDk || M.rock)) m = M.rockDk || M.rock;
+        else {
+          m = terrainRiserMaterial(MATERIALS[t].id) || null;
+          if (!m) { const tv = terrainVoxelMaterials(MATERIALS[t].id); m = (tv && tv.low) || null; }
+        }
       } catch (_) { m = null; }
       termSideOrig.set(t, m); return m;
     }
@@ -381,7 +392,8 @@
           const ctr = voxelCenter(i, j);
           const w = falloff(Math.hypot(ctr.x - gc.x, ctr.z - gc.z));
           if (w <= 0) continue;
-          cellH[j * N + i] = drag.startH[j * N + i] + worldDy * w;
+          // clamp at ground level (0) so you can't build below the ground
+          cellH[j * N + i] = clamp(drag.startH[j * N + i] + worldDy * w, 0, MAX_HEIGHT);
         }
       }
       rebuildGeometry();
