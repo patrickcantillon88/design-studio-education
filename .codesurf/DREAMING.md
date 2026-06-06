@@ -1,16 +1,12 @@
-The file is clean and accurate. Here is the full replacement content for `.codesurf/DREAMING.md`:
-
----
-
 # CodeSurf Workspace Memory — tinyworld
 
-Generated: 2026-06-05
+Generated: 2026-06-06
 
 ---
 
 ## Overview
 
-Tiny World Builder is a vanilla ES6, no-bundler 3D world editor built on Three.js r128. The app shell lives in `tiny-world-builder.html` (~1.4k lines); business logic is split across ~48 ordered modules under `engine/world/` (00–44 + 09b + 99-late-boot.js + `flight-combat-math.mjs` as an ES module), plus `engine/landscape/`. Total JS is approximately 40k+ lines. Deployed via Vercel and Netlify from `dist/` produced by `publish.sh`.
+Tiny World Builder is a vanilla ES6, no-bundler 3D world editor built on Three.js r128. The app shell lives in `tiny-world-builder.html` (~1.4k lines); business logic is split across 48 ordered modules under `engine/world/` (00–44 + 09b + 99-late-boot.js + `flight-combat-math.mjs` as an ES module), plus `engine/landscape/`. Total JS is approximately 40k+ lines. Deployed via Vercel and Netlify from `dist/` produced by `publish.sh`.
 
 ---
 
@@ -23,7 +19,11 @@ Tiny World Builder is a vanilla ES6, no-bundler 3D world editor built on Three.j
 - Skills on disk: 20 `.codex/skills/` directories — 19 `tinyworld-*` plus `threejs-primitive-reconstructor`; both `threejs-primitive-reconstructor` and `tinyworld-ghost-world-gen` are on disk but absent from AGENTS.md routing
 - Three.js pinned to r128; materials in `M.*` are shared — clone before mutating color
 
-**Module reference (key additions since 2026-06-04)**
+**Module reference (key additions as of 2026-06-05)**
+- `38-multiplayer-partykit.js` — multiplayer via PartyKit
+- `39-atmosphere-effects.js` — atmosphere/day-night effects (time-progression not yet wired)
+- `40-shield-system.js` — shield system
+- `41-flight-combat.js` — flight combat; `flight-combat-math.mjs` is the companion ES module
 - `42-account-wallet-players.js` — account/JWT/cloud-save (subscription system removed 2026-05-31)
 - `43-drag-drop-import.js` — GLB/model drag-drop import pipeline
 - `44-sub-object-edit.js` — part-level selection, hover hulls, transform delegation for voxel objects
@@ -52,12 +52,13 @@ Tiny World Builder is a vanilla ES6, no-bundler 3D world editor built on Three.j
 
 ---
 
-## Recent Major Features (2026-06-04/05)
+## Shipped Features (2026-06-04/05)
 
 **Sub-object editing (module 44)**
 - Part overrides support `rx/ry/rz` rotations; gizmo delegates to `window.__tinyworldSubEdit` when active
 - Layers panel shows part rows; radial secondary menu: Explode / Move / Scale / Recolor
 - Gated off in Play mode; voxel-builds only
+- Trees are editable via generic `part:N` keying; un-batches when editing, re-batches on exit
 
 **Build / Play mode toggle**
 - `window.__tinyworldIsPlayMode()` / `window.__tinyworldMode`; persisted under `BUILD_PLAY_LS`
@@ -102,15 +103,41 @@ Tiny World Builder is a vanilla ES6, no-bundler 3D world editor built on Three.j
 - CodeSurf auto-commits and auto-pushes to main → Netlify prod; branches do not guarantee isolation
 - Only HEAVY (rocket) engines have plume/glow; lift/turbo are propeller-only; plume must stay frustum-visible
 - Stone/path are one edge family — no bricks/risers between adjacent stone/path cells
+- `okKind` in `26-ai-generation.js` MUST include `model-stamp` and `blank-island`; do not adopt the fork's trimmed version
+
+---
+
+## Fork Improvements Report (`fork-improvements-report.md`, dated 2026-06-04)
+
+Two forks were ahead of upstream: `limudim972/main` (+168 commits) and `yuxiaoli/develop` (+5 commits).
+
+**Recommended to lift (status: liftable):**
+- Schema validation in `validateWorld()` — add per-cell `extras`/`transform` + landscape field checks in `26-ai-generation.js`; small effort; destructuring in both tuple and object paths must be updated
+- `?world=` URL param world loading (inline JSON + remote fetch) — `29-persistence-api.js` + `30-ui-boot-wiring.js`; medium effort
+- `touch-action: none` on `.minimap-wrap` — trivial CSS fix in `styles/tiny-world.css` (~line 2814)
+- `publish.sh` copy `data/` into `dist/data` — trivial
+
+**Needs investigation before lifting:**
+- Crowd walk-trail stroke renderer + visibility toggle (`17`, `25`, `11`)
+- Crop-duster/banner camera-relative flight refactor (`24`)
+- Ambient route anti-repeat/anti-loop concept (`11`)
+- House-edit long-press vs repeat-click floor removal (`20`)
+- Center modals vertically — trivial CSS
+- CRLF normalize in `tools/check.js`
+
+**Do not lift:**
+- House-aware crowd routing subsystem (~1900 lines) — architecturally incompatible with path-cell-only ambient crowd
+- Mobile toolbar redesign (hamburger/grid)
+- Any fork change that removes `model-stamp` from `okKind`
 
 ---
 
 ## Open Threads
 
-- AGENTS.md routing section says "44 files (00–41)" — stale; actual count is 48; modules 38–41 need skill routing, 42–44 need AGENTS.md mention
+- AGENTS.md routing section lists skills but modules 38–44 have no corresponding skill routing entries — stale
 - `tinyworld-ghost-world-gen` and `threejs-primitive-reconstructor` skills on disk, not routed in AGENTS.md
-- `fork-improvements-report.md` at repo root — eight improvement areas, action status unknown
-- `.claude/workflows/split-god-file.js` — purpose/status unconfirmed
+- `fork-improvements-report.md` — four liftable items (schema validation, URL param world load, minimap touch-action, publish data copy) not yet applied
+- `.claude/workflows/split-god-file.js` (~16k chars, dated 2026-06-04) — workflow script for splitting the old god-file; purpose/active status unconfirmed
 - Blast door concept — waiting on user mockup; no code yet
 - Day/night cycle — `39-atmosphere-effects.js` exists, no time-progression wired
 - NPC/agent pathfinding — Characters and AI Agents are stationary; no movement system
