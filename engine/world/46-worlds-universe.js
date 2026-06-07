@@ -76,6 +76,8 @@
   .tw-draftbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + var(--tw-worlds-bottom-inset,0px));z-index:70;display:flex;gap:8px;
     background:#10182bdd;border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:8px;align-items:center}
   .tw-draftbar span{font:600 12px system-ui;color:#ffd690;padding:0 6px}
+  body.tw-worlds-embed .toolbar{bottom:calc(28px + var(--tw-worlds-bottom-inset,0px)) !important}
+  body.tw-worlds-embed .tool-palette{bottom:calc(28px + var(--tw-worlds-bottom-inset,0px)) !important}
   `;
       document.head.appendChild(el('style', { id: 'tw-worlds-style', text: css }));
     }
@@ -289,6 +291,8 @@
         if (embedded || /deploy-preview|--[a-z0-9-]+\.netlify\.app$|netlify\.live$/i.test(host)) inset = '64px';
       } catch (_) { inset = '64px'; }
       document.documentElement.style.setProperty('--tw-worlds-bottom-inset', inset);
+      // Also lift the main app toolbar above the embed/preview bottom bar.
+      document.body.classList.toggle('tw-worlds-embed', inset !== '0px');
     }
 
     // ---- launcher button ----
