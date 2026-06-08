@@ -12,7 +12,11 @@ import TinyWorldParty, {
   cleanText, cleanNumber, cleanVec3, cleanPresence, cleanCell, cleanCellSet,
   cleanRole, cleanIsland, clampFloors, inIsland, takeToken, safeJson,
   RATE_LIMITS, MAX_CELL_COORD,
+  cleanHarvestAction, actionDurationMs, isAdjacentStep, withinReach, taxSplit,
+  heartsNow, oreRespawnMs, plantRipenMs, nodeActionForCell, deriveWorldState,
+  verifyJoinTokenWeb, GROSS_REWARD, HEART_MAX, ACTION_COOLDOWN_MS,
 } from '../party/index.js';
+import { signJoinToken, worldPreview } from '../netlify/functions/lib/worlds.mjs';
 
 // ---- mock PartyKit room + connections ----------------------------------
 function makeRoom() {
@@ -296,4 +300,219 @@ test('a returning admitted member (same id) is re-admitted, not re-lobbied', () 
   assert.equal(last(v2).admitted, true, 're-admitted from seat');
   assert.equal(last(v2).role, 'viewer');
   assert.equal(party.lobby.has('v'), false, 'not sent back to the lobby');
+});
+
+// ====================== Worlds MMO pure rules ===========================
+
+test('cleanHarvestAction allows only the four actions', () => {
+  for (const a of ['fish', 'mine', 'gather', 'hunt']) assert.equal(cleanHarvestAction(a), a);
+  assert.equal(cleanHarvestAction('dig'), null);
+  assert.equal(cleanHarvestAction(''), null);
+  assert.equal(cleanHarvestAction(null), null);
+});
+
+test('action durations match the docs (fish/gather 3s, mine 5s, hunt 1s)', () => {
+  assert.equal(actionDurationMs('fish'), 3000);
+  assert.equal(actionDurationMs('gather'), 3000);
+  assert.equal(actionDurationMs('mine'), 5000);
+  assert.equal(actionDurationMs('hunt'), 1000);
+});
+
+test('isAdjacentStep enforces one cell at a time', () => {
+  assert.equal(isAdjacentStep({ x: 2, z: 2 }, { x: 3, z: 2 }), true);
+  assert.equal(isAdjacentStep({ x: 2, z: 2 }, { x: 3, z: 3 }), true, 'diagonal is one step');
+  assert.equal(isAdjacentStep({ x: 2, z: 2 }, { x: 2, z: 2 }), false, 'no move rejected');
+  assert.equal(isAdjacentStep({ x: 2, z: 2 }, { x: 4, z: 2 }), false, 'two-cell jump rejected');
+});
+
+test('withinReach is on-node or 8-neighbor', () => {
+  assert.equal(withinReach({ x: 5, z: 4 }, { x: 5, z: 5 }), true);
+  assert.equal(withinReach({ x: 5, z: 5 }, { x: 5, z: 5 }), true);
+  assert.equal(withinReach({ x: 5, z: 3 }, { x: 5, z: 5 }), false);
+});
+
+test('taxSplit: owner keeps all, visitor split sums to gross, ownerless keeps all', () => {
+  const visitor = taxSplit(3, 10, false);
+  assert.equal(visitor.owner, 300, '10% of 3000 milli');
+  assert.equal(visitor.harvester, 2700);
+  assert.equal(visitor.owner + visitor.harvester, 3000, 'conserves the gross');
+  const owner = taxSplit(3, 10, true);
+  assert.equal(owner.owner, 0);
+  assert.equal(owner.harvester, 3000, 'owner harvesting own world keeps all');
+  const ownerless = taxSplit(3, null, false);
+  assert.equal(ownerless.owner, 0);
+  assert.equal(ownerless.harvester, 3000, 'no owner = no tax sink');
+  const heavy = taxSplit(3, 100, false);
+  assert.equal(heavy.owner, 3000);
+  assert.equal(heavy.harvester, 0);
+});
+
+test('heartsNow regenerates 1/min and caps at max', () => {
+  const now = 10_000_000;
+  assert.equal(heartsNow(10, now, now).hearts, HEART_MAX, 'full stays full');
+  assert.equal(heartsNow(5, now - 3 * 60_000, now).hearts, 8, '3 minutes => +3');
+  assert.equal(heartsNow(9, now - 5 * 60_000, now).hearts, HEART_MAX, 'caps at max');
+  assert.equal(heartsNow(0, now - 30_000, now).hearts, 0, 'under a minute => no regen');
+});
+
+test('regrowth timers scale with stone / grass counts', () => {
+  assert.ok(oreRespawnMs(40) < oreRespawnMs(0), 'more stone => faster ore respawn');
+  assert.ok(plantRipenMs(120) < plantRipenMs(0), 'more grass => faster ripening');
+});
+
+test('nodeActionForCell maps top tile to its harvest action', () => {
+  assert.equal(nodeActionForCell('water', null), 'fish');
+  assert.equal(nodeActionForCell('stone', null), 'mine');
+  assert.equal(nodeActionForCell('grass', 'corn'), 'gather');
+  assert.equal(nodeActionForCell('grass', 'cow'), 'hunt');
+  assert.equal(nodeActionForCell('grass', null), null);
+});
+
+test('deriveWorldState: connected water => one shared fish body, ore/plant nodes, standable grass', () => {
+  const state = deriveWorldState({
+    v: 4, gridSize: 8,
+    cells: [
+      { x: 1, z: 1, terrain: 'water' }, { x: 2, z: 1, terrain: 'water' }, { x: 1, z: 2, terrain: 'water' },
+      { x: 5, z: 5, terrain: 'stone' },
+      { x: 4, z: 2, terrain: 'dirt', kind: 'corn' },
+      { x: 3, z: 3, terrain: 'grass', kind: 'tree' },
+    ],
+  }, () => 0.9); // rng 0.9 => ore tier 3
+  // The three connected water cells share one fish node.
+  const waterIds = new Set([state.cellIndex['1,1'], state.cellIndex['2,1'], state.cellIndex['1,2']]);
+  assert.equal(waterIds.size, 1, 'one connected water body');
+  const fishNode = state.nodes[state.cellIndex['1,1']];
+  assert.equal(fishNode.type, 'fish');
+  assert.equal(state.nodes[state.cellIndex['5,5']].type, 'ore');
+  assert.equal(state.nodes[state.cellIndex['5,5']].charges, 3, 'rng 0.9 => tier 3');
+  assert.equal(state.nodes[state.cellIndex['4,2']].type, 'plant');
+  assert.equal(state.stoneCount, 1);
+  assert.equal(state.grassCells.indexOf('5,5'), -1, 'stone is not standable');
+  assert.equal(state.grassCells.indexOf('1,1'), -1, 'water is not standable');
+  assert.equal(state.grassCells.indexOf('3,3'), -1, 'tree blocks standing');
+  assert.ok(state.grassCells.indexOf('0,0') >= 0, 'empty cells are standable grass');
+});
+
+test('verifyJoinTokenWeb accepts a valid signed token and rejects tampering', async () => {
+  const tok = signJoinToken({ w: 42, slug: 'meadow', p: 7, r: 'play' }, 'sekret', 60_000);
+  const ok = await verifyJoinTokenWeb(tok, 'sekret');
+  assert.ok(ok, 'valid token verifies');
+  assert.equal(ok.w, 42);
+  assert.equal(ok.r, 'play');
+  assert.equal(await verifyJoinTokenWeb(tok, 'wrong-secret'), null, 'wrong secret rejected');
+  assert.equal(await verifyJoinTokenWeb(tok.slice(0, -2) + 'zz', 'sekret'), null, 'tampered sig rejected');
+  const expired = signJoinToken({ w: 1, r: 'play' }, 'sekret', -1000);
+  assert.equal(await verifyJoinTokenWeb(expired, 'sekret'), null, 'expired token rejected');
+});
+
+// ====================== Worlds MMO room behavior ========================
+
+function worldSetup() {
+  const room = makeRoom();
+  room.id = 'world-meadow';
+  const party = new TinyWorldParty(room);
+  party.setWorldStateFromData({
+    v: 4, gridSize: 8,
+    cells: [{ x: 5, z: 5, terrain: 'stone' }, { x: 1, z: 1, terrain: 'water' }, { x: 1, z: 2, terrain: 'water' }],
+  }, { id: 42, taxPercent: 10, ownerProfileId: 99 });
+  const connect = (id) => { const c = room.addConn(id); party.onConnect(c); return c; };
+  return { room, party, connect };
+}
+
+test('world room admits connections directly as observers (no host/lobby)', () => {
+  const { party, connect } = worldSetup();
+  const c = connect('p1');
+  const w = last(c);
+  assert.equal(w.type, 'welcome');
+  assert.equal(w.world, true);
+  assert.equal(w.role, 'observe');
+  assert.equal(w.admitted, true);
+  assert.equal(party.hostId, null, 'world rooms have no host');
+});
+
+test('a play harvest mines ore: heart spent, node decremented, tax-split credited', () => {
+  const { party, connect } = worldSetup();
+  connect('p1');
+  const p = party.getPlayer('p1');
+  p.role = 'play'; p.profileId = 7; p.x = 5; p.z = 4;   // standing next to the ore at 5,5
+  const startCharges = party.worldState.nodes[party.worldState.cellIndex['5,5']].charges;
+  const seq = party.handleHarvestStart('p1', { action: 'mine', x: 5, z: 5 });
+  assert.ok(seq, 'harvest started');
+  assert.equal(party.getPlayer('p1').hearts, HEART_MAX - 1, 'one heart spent on start');
+  assert.equal(party.worldState.nodes[party.worldState.cellIndex['5,5']].lockedBy, 'p1', 'node locked');
+  party.resolveHarvest('p1', seq);
+  const node = party.worldState.nodes[party.worldState.cellIndex['5,5']];
+  assert.equal(node.charges, startCharges - 1, 'one charge consumed');
+  assert.equal(node.lockedBy, null, 'node unlocked after completion');
+  // 10% tax: harvester keeps 2700 milli => 2 whole ore this harvest.
+  assert.equal(party.pendingResources.get('7').ore, 2, 'harvester credited whole ore');
+  assert.ok(party.getPlayer('p1').cooldowns.mine > Date.now(), 'cooldown armed');
+});
+
+test('observers and out-of-range players cannot harvest', () => {
+  const { party, connect } = worldSetup();
+  connect('o1');
+  const o = party.getPlayer('o1');
+  o.role = 'observe'; o.x = 5; o.z = 4;
+  assert.equal(party.handleHarvestStart('o1', { action: 'mine', x: 5, z: 5 }), undefined, 'observer blocked');
+  assert.equal(party.pendingResources.size, 0, 'no resources minted for observer');
+
+  connect('p2');
+  const p = party.getPlayer('p2');
+  p.role = 'play'; p.profileId = 8; p.x = 0; p.z = 0;   // far from the ore
+  party.handleHarvestStart('p2', { action: 'mine', x: 5, z: 5 });
+  assert.equal(party.getPlayer('p2').busyNode, null, 'out-of-range harvest rejected');
+});
+
+test('a node locked by another player blocks a second miner', () => {
+  const { party, connect } = worldSetup();
+  connect('p1'); connect('p2');
+  const a = party.getPlayer('p1'); a.role = 'play'; a.profileId = 7; a.x = 5; a.z = 4;
+  const b = party.getPlayer('p2'); b.role = 'play'; b.profileId = 8; b.x = 6; b.z = 5;
+  party.handleHarvestStart('p1', { action: 'mine', x: 5, z: 5 });
+  party.handleHarvestStart('p2', { action: 'mine', x: 5, z: 5 });
+  assert.equal(party.getPlayer('p2').busyNode, null, 'second miner is denied the locked node');
+});
+
+test('worldPreview emits sparse terrain/kind tuples for the card minimap', () => {
+  const p = worldPreview({ cells: [
+    { x: 1, z: 1, terrain: 'water' },
+    { x: 2, z: 2, terrain: 'stone' },
+    { x: 3, z: 3, terrain: 'dirt', kind: 'corn' },
+  ] });
+  assert.deepEqual(p[0], [1, 1, 'water']);
+  assert.deepEqual(p[1], [2, 2, 'stone']);
+  assert.deepEqual(p[2], [3, 3, 'dirt', 'corn'], 'kind preserved for object cells');
+  assert.equal(worldPreview({ cells: [] }).length, 0);
+});
+
+test('open testing mode (no join secret) seeds from client cells and lets a declared player harvest', async () => {
+  const room = makeRoom();
+  room.id = 'world-open';            // env has no WORLDS_JOIN_SECRET => open mode
+  const party = new TinyWorldParty(room);
+  party.onConnect(room.addConn('p1'));
+  await party.onWorldMessage({
+    type: 'world.join', role: 'play', profileId: 7, gridSize: 8,
+    cells: [[5, 5, 'stone'], [1, 1, 'water']],
+  }, { id: 'p1' });
+  assert.equal(party.openMode, true, 'open mode engaged without a secret');
+  const p = party.getPlayer('p1');
+  assert.equal(p.role, 'play', 'declared role honored in open mode');
+  p.x = 5; p.z = 4;
+  const seq = party.handleHarvestStart('p1', { action: 'mine', x: 5, z: 5 });
+  assert.ok(seq, 'harvest starts in open mode');
+  party.resolveHarvest('p1', seq);
+  assert.equal(party.pendingResources.get('7').ore, 3, 'ownerless world => full gross to harvester');
+});
+
+test('movement is one standable cell at a time and locked during a harvest', () => {
+  const { party, connect } = worldSetup();
+  connect('p1');
+  const p = party.getPlayer('p1'); p.role = 'play'; p.profileId = 7; p.x = 3; p.z = 3;
+  party.handleMove('p1', { x: 4, z: 3 });
+  assert.deepEqual({ x: party.getPlayer('p1').x, z: party.getPlayer('p1').z }, { x: 4, z: 3 }, 'one step accepted');
+  party.handleMove('p1', { x: 7, z: 3 });
+  assert.deepEqual({ x: party.getPlayer('p1').x, z: party.getPlayer('p1').z }, { x: 4, z: 3 }, 'two-cell jump rejected');
+  party.handleMove('p1', { x: 1, z: 1 });
+  assert.deepEqual({ x: party.getPlayer('p1').x, z: party.getPlayer('p1').z }, { x: 4, z: 3 }, 'water is not standable');
 });
