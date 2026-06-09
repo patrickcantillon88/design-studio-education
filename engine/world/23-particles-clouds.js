@@ -270,12 +270,14 @@
         o.material = o.material.map(m => {
           const clone = m.clone();
           if (m.onBeforeCompile) clone.onBeforeCompile = m.onBeforeCompile;
+          if (typeof m.customProgramCacheKey === 'function') clone.customProgramCacheKey = m.customProgramCacheKey;
           return clone;
         });
       } else {
         const parentMat = o.material;
         o.material = o.material.clone();
         if (parentMat.onBeforeCompile) o.material.onBeforeCompile = parentMat.onBeforeCompile;
+        if (typeof parentMat.customProgramCacheKey === 'function') o.material.customProgramCacheKey = parentMat.customProgramCacheKey;
       }
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       mats.forEach(m => {

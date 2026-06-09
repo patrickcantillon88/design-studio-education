@@ -475,6 +475,7 @@
         mesh.setMatrixAt(i, dummy.matrix);
       }
       mesh.instanceMatrix.needsUpdate = true;
+      mesh.userData.noReceiveShadow = true;
       g.add(mesh);
     }
   }
@@ -494,6 +495,7 @@
     );
     const mesh = new THREE.Mesh(geo, terrainRiserMaterial(terrain));
     mesh.position.y = -DIRT_H + riserHeight * 0.5;
+    mesh.userData.noReceiveShadow = true;
     g.add(mesh);
   }
 
@@ -583,6 +585,7 @@
         mesh.setMatrixAt(i, dummy.matrix);
       }
       mesh.instanceMatrix.needsUpdate = true;
+      mesh.userData.noReceiveShadow = true;
       g.add(mesh);
     }
   }
@@ -675,6 +678,7 @@
         mesh.setMatrixAt(i, dummy.matrix);
       }
       mesh.instanceMatrix.needsUpdate = true;
+      mesh.userData.noReceiveShadow = true;
       g.add(mesh);
     }
   }

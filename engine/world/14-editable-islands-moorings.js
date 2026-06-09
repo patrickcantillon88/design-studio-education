@@ -167,7 +167,6 @@
     const g = new THREE.Group();
     vbox(g, GRID * TILE, 0.10, GRID * TILE, 0, -DIRT_H - 0.055, 0, M.islandUnderD, { noGap: true, skipTop: true });
     voxelInvertedSteppedRoof(g, GRID * TILE, GRID * TILE, -DIRT_H - 0.020, M.islandUnder, M.islandUnderD);
-    addIslandSideBacking(g);
     addIslandUtilityUnderside(g);
     addEditableIslandLiftEngines(g, island);
     addIslandEdgeDressing(g);

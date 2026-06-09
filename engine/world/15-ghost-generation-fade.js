@@ -267,6 +267,7 @@
     if (hit) return hit;
     const mat = baseMat.clone();
     if (baseMat.onBeforeCompile) mat.onBeforeCompile = baseMat.onBeforeCompile;
+    if (typeof baseMat.customProgramCacheKey === 'function') mat.customProgramCacheKey = baseMat.customProgramCacheKey;
     if (grayscale) desaturateMaterial(mat);
     const baseOp = baseMat.opacity === undefined ? 1 : baseMat.opacity;
     const factor = bucket / FADE_BUCKETS;
@@ -290,6 +291,7 @@
     if (hit) return hit;
     const mat = baseMat.clone();
     if (baseMat.onBeforeCompile) mat.onBeforeCompile = baseMat.onBeforeCompile;
+    if (typeof baseMat.customProgramCacheKey === 'function') mat.customProgramCacheKey = baseMat.customProgramCacheKey;
     if (colorHex !== undefined) {
       mat.color.setHex(colorHex);
     }
@@ -341,6 +343,7 @@
         o.material = o.material.map(m => {
           const clone = m.clone();
           if (m.onBeforeCompile) clone.onBeforeCompile = m.onBeforeCompile;
+          if (typeof m.customProgramCacheKey === 'function') clone.customProgramCacheKey = m.customProgramCacheKey;
           return clone;
         });
         const mats = o.material;

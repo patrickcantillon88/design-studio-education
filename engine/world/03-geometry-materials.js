@@ -692,9 +692,11 @@
     let out = shadedMaterialCache.get(key);
     if (!out) {
       out = mat.clone();
+      if (mat.onBeforeCompile) out.onBeforeCompile = mat.onBeforeCompile;
+      if (typeof mat.customProgramCacheKey === 'function') out.customProgramCacheKey = mat.customProgramCacheKey;
       out.color.multiplyScalar(factor);
       if (out.emissive) out.emissive.multiplyScalar(factor);
-      out.userData = Object.assign({}, mat.userData, { underIslandShaded: true });
+      out.userData = Object.assign({}, mat.userData || {}, out.userData || {}, { underIslandShaded: true });
       shadedMaterialCache.set(key, out);
     }
     return out;
@@ -715,6 +717,7 @@
     } else {
       shellMat.map = baseMat.map || shellMat.map || null;
       shellMat.onBeforeCompile = baseMat.onBeforeCompile;
+      if (typeof baseMat.customProgramCacheKey === 'function') shellMat.customProgramCacheKey = baseMat.customProgramCacheKey;
     }
     shellMat.userData = Object.assign({}, baseMat.userData || {}, shellMat.userData || {}, {
       islandShellMaterial: true,

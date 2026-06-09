@@ -1,4 +1,32 @@
   // -------- procedural pixel-art textures --------
+  // Minification tuning shared by every procedural WORLD-SURFACE texture
+  // (tiles, cottage panels, island-side strata). The voxel look wants crisp
+  // texels up close, so magFilter stays NEAREST (sharp when magnified). But at
+  // the game's grazing isometric angle the ground and island sides minify hard:
+  // with no mipmaps + no anisotropy that produces the swimming moiré "stripes"
+  // that rotate as the camera orbits, plus hard LOD-band steps from nearest-mip
+  // selection. The fix is two-part and BOTH halves matter (the strata sheet
+  // already had mipmaps yet still striped because it lacked these):
+  //   * NearestMipmapLinear  -> mipmaps with LINEAR blending between LOD levels,
+  //                             which removes the visible "various LOD level"
+  //                             band steps the user reported.
+  //   * anisotropy           -> multi-tap sampling along the grazing axis, which
+  //                             is what actually kills the diagonal moiré on
+  //                             surfaces viewed edge-on (the dominant symptom).
+  // All tile textures are power-of-two (16..128); the strata sheet is NPOT
+  // (1024x192) but WebGL2 (r128's default context) generates its mips fine.
+  function tuneWorldTextureFiltering(tex) {
+    if (!tex) return tex;
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestMipmapLinearFilter;
+    tex.generateMipmaps = true;
+    const maxAniso = (renderer && renderer.capabilities && renderer.capabilities.getMaxAnisotropy)
+      ? renderer.capabilities.getMaxAnisotropy() : 1;
+    tex.anisotropy = Math.min(8, maxAniso || 1);
+    tex.needsUpdate = true;
+    return tex;
+  }
+
   function createPixelTexture(type, scale = 16) {
     const canvas = document.createElement('canvas');
     canvas.width = scale;
@@ -595,11 +623,10 @@
     }
 
     const tex = new THREE.CanvasTexture(canvas);
-    tex.magFilter = THREE.NearestFilter;
-    tex.minFilter = THREE.NearestFilter;
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
     tex.encoding = THREE.sRGBEncoding;
+    tuneWorldTextureFiltering(tex);
     return tex;
   }
 
@@ -697,11 +724,10 @@
     }
 
     const tex = new THREE.CanvasTexture(canvas);
-    tex.magFilter = THREE.NearestFilter;
-    tex.minFilter = THREE.NearestMipmapNearestFilter;
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
     tex.encoding = THREE.sRGBEncoding;
+    tuneWorldTextureFiltering(tex);
     return tex;
   }
 
@@ -826,12 +852,11 @@
     ctx.putImageData(image, 0, 0);
 
     const tex = new THREE.CanvasTexture(canvas);
-    tex.magFilter = THREE.NearestFilter;
-    tex.minFilter = THREE.NearestMipmapNearestFilter;
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.ClampToEdgeWrapping;
     tex.flipY = false;
     tex.encoding = THREE.sRGBEncoding;
+    tuneWorldTextureFiltering(tex);
     return tex;
   }
 
@@ -846,12 +871,11 @@
     const fallback = createIslandSideStrataReferenceTexture(width, height);
     if (fallback && fallback.image) ctx.drawImage(fallback.image, 0, 0, width, height);
     const tex = new THREE.CanvasTexture(canvas);
-    tex.magFilter = THREE.NearestFilter;
-    tex.minFilter = THREE.NearestMipmapNearestFilter;
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.ClampToEdgeWrapping;
     tex.flipY = false;
     tex.encoding = THREE.sRGBEncoding;
+    tuneWorldTextureFiltering(tex);
     tex.userData = Object.assign({}, tex.userData || {}, {
       sourceSrc: src,
       sourceKind: 'island-side-strata-image',
@@ -895,7 +919,23 @@
     material.userData.worldTextureScale = textureScale;
     material.userData.worldVoxelSeams = !!opts.voxelSeams;
     material.userData.worldEdgeStrata = !!opts.edgeStrata;
+    // The voxel side/strata branches below use fwidth() for screen-space LOD
+    // anti-aliasing. In GLSL ES 1.00 (three's default for Lambert) derivatives
+    // need this extension flag, or the shader fails to compile. Base
+    // Material.clone() does NOT copy .extensions (only ShaderMaterial does), so
+    // the clone helpers (customMaterial / surfaceMaterial) re-copy it.
+    if (needsWorldVoxel) {
+      material.extensions = Object.assign({}, material.extensions, { derivatives: true });
+    }
     material.needsUpdate = true;
+    material.customProgramCacheKey = () => [
+      'tw-world-uv',
+      textureScale.toFixed(4),
+      opts.voxelSeams ? 'seams' : 'plain',
+      opts.edgeStrata ? 'edge' : 'no-edge',
+      edgeStrataTopY.toFixed(4),
+      edgeStrataHeight.toFixed(4),
+    ].join(':');
     material.onBeforeCompile = (shader) => {
       if (needsWorldVoxel) {
         shader.vertexShader = shader.vertexShader.replace(
@@ -969,9 +1009,20 @@
           float underFace = smoothstep(0.62, 0.86, -twVoxelNormal.y);
           float underNoiseA = twVoxelBlockHash(floor(vWorldVoxelPos.xz * 5.6));
           float underNoiseB = twVoxelBlockHash(floor(vWorldVoxelPos.xz * 13.2 + vec2(17.0, 41.0)));
-          float rockNoise = (sideNoiseA - 0.5) * 0.10 + (sideNoiseB - 0.5) * 0.045;
-          float underNoise = (underNoiseA - 0.5) * 0.12 + (underNoiseB - 0.5) * 0.050;
-          float faintCrack = step(0.965, sideNoiseB) * twSideFace * 0.10;
+          // Each per-cell hash above aliases once its cells drop below ~1 screen
+          // pixel (grazing side walls hit this hard). Fade every term to its mean
+          // as the screen-space footprint grows, so the noise stops swimming into
+          // diagonal stripes at distance while staying crisp up close.
+          float dSide = fwidth(twSideCoord);
+          float dSideY = fwidth(sideY);
+          float dXZ = max(fwidth(vWorldVoxelPos.x), fwidth(vWorldVoxelPos.z));
+          float fadeSideA  = 1.0 - smoothstep(0.45, 1.0, max(7.3  * dSide, 5.1  * dSideY));
+          float fadeSideB  = 1.0 - smoothstep(0.45, 1.0, max(15.7 * dSide, 11.3 * dSideY));
+          float fadeUnderA = 1.0 - smoothstep(0.45, 1.0, 5.6  * dXZ);
+          float fadeUnderB = 1.0 - smoothstep(0.45, 1.0, 13.2 * dXZ);
+          float rockNoise = (sideNoiseA - 0.5) * 0.10 * fadeSideA + (sideNoiseB - 0.5) * 0.045 * fadeSideB;
+          float underNoise = (underNoiseA - 0.5) * 0.12 * fadeUnderA + (underNoiseB - 0.5) * 0.050 * fadeUnderB;
+          float faintCrack = step(0.965, sideNoiseB) * twSideFace * 0.10 * fadeSideB;
           diffuseColor.rgb *= 1.0 + twSideFace * rockNoise + underFace * underNoise;
           diffuseColor.rgb *= mix(1.0, 0.88, faintCrack);
           ` : ''}
@@ -1387,6 +1438,7 @@
     return new THREE.ShaderMaterial({
       name: 'island-side-strata-shader',
       side: THREE.FrontSide,
+      extensions: { derivatives: true }, // fwidth() LOD anti-aliasing in the fragment shader
       uniforms: {
         uTopY: { value: ISLAND_SIDE_STRATA_RENDER_TOP_Y },
         uHeight: { value: ISLAND_SIDE_STRATA_RENDER_HEIGHT },
@@ -1425,18 +1477,33 @@
           float coord = abs(n.x) > abs(n.z) ? vTwWorldPos.z : vTwWorldPos.x;
           float down = clamp(uTopY - vTwWorldPos.y, 0.0, uHeight);
           float v = clamp(down / max(uHeight, 0.0001), 0.0, 1.0);
-          float seed = twStrataHash(vec2(floor(coord * 4.0), 19.0));
+          // Screen-space footprint of the two procedural axes (world units / pixel).
+          // Every detail term is a hash sampled per integer cell at some frequency f;
+          // once f*footprint nears ~1 the cells go sub-pixel and alias into swimming
+          // diagonal stripes (the side walls, viewed nearly edge-on, are the worst
+          // case). Fade each term to its mean before that so the band smooths with
+          // distance/grazing instead of striping, while staying crisp up close.
+          float dCoord = fwidth(coord);
+          float dV = fwidth(v);
+          float fadeSeed   = 1.0 - smoothstep(0.45, 1.0, 4.0  * dCoord);
+          float fadeD2R    = 1.0 - smoothstep(0.45, 1.0, 2.1  * dCoord);
+          float fadeCoarse = 1.0 - smoothstep(0.45, 1.0, max(6.2  * dCoord, 9.4  * dV));
+          float fadeFine   = 1.0 - smoothstep(0.45, 1.0, max(18.0 * dCoord, 23.0 * dV));
+          float fadeRoot   = 1.0 - smoothstep(0.45, 1.0, 13.0 * dCoord);
+          float seed = mix(0.5, twStrataHash(vec2(floor(coord * 4.0), 19.0)), fadeSeed);
           float grassDrop = 0.18 + seed * 0.10;
-          float dirtToRock = 0.62 + twStrataHash(vec2(floor(coord * 2.1), 31.0)) * 0.12;
-          float grassMask = 1.0 - smoothstep(grassDrop, grassDrop + 0.055, v);
-          float rockMask = smoothstep(dirtToRock, dirtToRock + 0.11, v);
+          float dirtToRock = 0.62 + mix(0.5, twStrataHash(vec2(floor(coord * 2.1), 31.0)), fadeD2R) * 0.12;
+          float grassW = max(0.055, dV * 1.5);
+          float rockW = max(0.11, dV * 1.5);
+          float grassMask = 1.0 - smoothstep(grassDrop, grassDrop + grassW, v);
+          float rockMask = smoothstep(dirtToRock, dirtToRock + rockW, v);
           float dirtMask = (1.0 - grassMask) * (1.0 - rockMask);
-          float coarse = twStrataHash(floor(vec2(coord * 6.2, v * 9.4))) - 0.5;
-          float fine = twStrataHash(floor(vec2(coord * 18.0 + v * 1.7, v * 23.0))) - 0.5;
+          float coarse = (twStrataHash(floor(vec2(coord * 6.2, v * 9.4))) - 0.5) * fadeCoarse;
+          float fine = (twStrataHash(floor(vec2(coord * 18.0 + v * 1.7, v * 23.0))) - 0.5) * fadeFine;
           vec3 grass = vec3(0.40, 0.62, 0.17) + vec3(coarse * 0.08, coarse * 0.10, fine * 0.035);
           vec3 dirt = vec3(0.43, 0.27, 0.12) + vec3(coarse * 0.07, fine * 0.035, fine * 0.015);
           vec3 rock = vec3(0.28, 0.29, 0.27) + vec3(coarse * 0.10 + fine * 0.04);
-          float root = step(0.78, twStrataHash(vec2(floor(coord * 13.0), 7.0))) * smoothstep(0.12, 0.22, v) * (1.0 - smoothstep(0.54, 0.70, v));
+          float root = step(0.78, twStrataHash(vec2(floor(coord * 13.0), 7.0))) * smoothstep(0.12, 0.22, v) * (1.0 - smoothstep(0.54, 0.70, v)) * fadeRoot;
           vec3 col = grass * grassMask + dirt * dirtMask + rock * rockMask;
           col = mix(col, vec3(0.12, 0.07, 0.035), root * 0.45);
           col = max(col, vec3(0.14, 0.13, 0.11));
@@ -2117,6 +2184,8 @@
     if (!customMaterialCache.has(key)) {
       const mat = base.clone();
       if (base.onBeforeCompile) mat.onBeforeCompile = base.onBeforeCompile;
+      if (typeof base.customProgramCacheKey === 'function') mat.customProgramCacheKey = base.customProgramCacheKey;
+      if (base.extensions) mat.extensions = base.extensions; // Lambert clone() drops .extensions; keep fwidth-derivatives flag
       if (mat.color) {
         mat.color.set(clean);
         applyWearToMaterialColor(mat.color, 'custom', renderMaterialWear);
@@ -2142,6 +2211,8 @@
     if (!customMaterialCache.has(key)) {
       const mat = base.clone();
       if (base.onBeforeCompile) mat.onBeforeCompile = base.onBeforeCompile;
+      if (typeof base.customProgramCacheKey === 'function') mat.customProgramCacheKey = base.customProgramCacheKey;
+      if (base.extensions) mat.extensions = base.extensions; // keep fwidth-derivatives flag through clone
       if (mat.emissive && hasEmissive) { mat.emissive.set(emHex); mat.emissiveIntensity = emInt; }
       if (hasOpacity) { mat.transparent = true; mat.opacity = op; }
       cacheCustomMaterial(key, mat);
@@ -2489,12 +2560,39 @@
     return obj;
   }
 
+  const _twTerrainShadowReceivers = new Set();
+  let _twTerrainShadowReceiveEnabled = null;
+
+  function terrainShadowReceiveEnabledForCamera() {
+    if (typeof viewSize === 'undefined') return true;
+    const scaledDefaultView = (typeof DEFAULT_VIEW_SIZE !== 'undefined' && typeof HOME_GRID_DEFAULT !== 'undefined')
+      ? DEFAULT_VIEW_SIZE * (GRID / HOME_GRID_DEFAULT)
+      : GRID;
+    const farShadowCutoff = Math.max(10, scaledDefaultView * 1.18);
+    return viewSize <= farShadowCutoff;
+  }
+
+  function updateTerrainShadowReceiversForCamera(force = false) {
+    const enabled = terrainShadowReceiveEnabledForCamera();
+    if (!force && _twTerrainShadowReceiveEnabled === enabled) return;
+    _twTerrainShadowReceiveEnabled = enabled;
+    _twTerrainShadowReceivers.forEach(mesh => {
+      if (!mesh || !mesh.isMesh || !mesh.parent) {
+        _twTerrainShadowReceivers.delete(mesh);
+        return;
+      }
+      mesh.receiveShadow = enabled && !(mesh.userData && mesh.userData.noReceiveShadow);
+    });
+  }
+
   function groundReceiveOnly(obj) {
     obj.traverse(c => {
       if (c.isMesh) {
         c.castShadow = false;
-        c.receiveShadow = true;
+        c.receiveShadow = terrainShadowReceiveEnabledForCamera() && !(c.userData && c.userData.noReceiveShadow);
         c.frustumCulled = true;
+        c.userData.terrainShadowReceiver = true;
+        _twTerrainShadowReceivers.add(c);
       }
     });
     return obj;

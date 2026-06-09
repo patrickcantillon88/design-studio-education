@@ -149,7 +149,12 @@
     const wallTopY = ISLAND_SIDE_STRATA_RENDER_TOP_Y;
     const wallH = ISLAND_SIDE_STRATA_RENDER_HEIGHT;
     const wallBottomY = wallTopY - wallH;
-    const mat = islandShellMaterial(M.boardSideEdge || M.boardSide);
+    // Flat untextured backing — NOT the strata shader, NOT a world-mapped
+    // texture. Any texture here crawls in one axis through the moving voxel-
+    // greeble gaps and aliases into diagonal stripes (badly under pixelation).
+    // A solid colour just fills the gaps so the island reads solid; the voxel
+    // greebles are the visible, camera-stable side surface.
+    const mat = islandShellMaterial(M.boardSideFlat);
     // Where a perimeter cell is water, drop the green grass cap down to the
     // water line so a river reaching the rim shows water instead of a green
     // wall. The strata shader maps its texture by WORLD-Y, so a shorter cap
@@ -478,7 +483,6 @@
     }
     vbox(homeBorderGroup, GRID * TILE, 0.10, GRID * TILE, 0, -DIRT_H - 0.055, 0, M.islandUnderD, { noGap: true, skipTop: true });
     voxelInvertedSteppedRoof(homeBorderGroup, GRID * TILE, GRID * TILE, -DIRT_H - 0.020, M.islandUnder, M.islandUnderD);
-    addIslandSideBacking(homeBorderGroup);
     addIslandUtilityUnderside(homeBorderGroup);
     addIslandRocketEngines(homeBorderGroup);
     addIslandEdgeDressing(homeBorderGroup);

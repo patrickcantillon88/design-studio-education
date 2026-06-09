@@ -895,20 +895,50 @@
     return Math.max(1, pixelSize / pixelZoomResolutionScale());
   }
 
-  function ensurePixelResources(drawW, drawH, pixelSize, wantNormals) {
+  function ensurePixelResources(drawW, drawH, pixelSize, wantNormals, wantDepthEdge) {
     const targetW = Math.max(1, Math.floor(drawW / pixelSize));
     const targetH = Math.max(1, Math.floor(drawH / pixelSize));
+    // The pixelation pass renders the scene to this low-res target and then
+    // nearest-upscales it for the chunky look. Rendered with a single sample,
+    // the dense voxel SILHOUETTES on the island sides alias and crawl into the
+    // swimming diagonal "stripes" the user sees as the camera moves. MSAA
+    // multisamples coverage so those edges resolve to smooth chunky pixels (the
+    // NearestFilter upscale keeps the pixels crisp; surface texture/shader
+    // detail is handled separately by mipmaps + fwidth AA). r128's multisample
+    // target can't resolve a sampleable depth texture, and the depth-edge
+    // outline option needs one — so fall back to the plain depth-texture target
+    // only when depth edges are enabled (off by default).
+    const canMSAA = !wantDepthEdge && !!(renderer.capabilities && renderer.capabilities.isWebGL2)
+      && typeof THREE.WebGLMultisampleRenderTarget === 'function';
+    const wantMode = canMSAA ? 'msaa' : 'depth';
+    if (pixelState.target && pixelState.targetMode !== wantMode) {
+      pixelState.target.dispose();
+      pixelState.target = null;
+    }
     if (!pixelState.target) {
-      const depth = new THREE.DepthTexture(targetW, targetH);
-      depth.format = THREE.DepthFormat;
-      depth.type = THREE.UnsignedShortType;
-      pixelState.target = new THREE.WebGLRenderTarget(targetW, targetH, {
-        minFilter: THREE.NearestFilter,
-        magFilter: THREE.NearestFilter,
-        format: THREE.RGBAFormat,
-        depthBuffer: true,
-        depthTexture: depth,
-      });
+      if (wantMode === 'msaa') {
+        const t = new THREE.WebGLMultisampleRenderTarget(targetW, targetH, {
+          minFilter: THREE.NearestFilter,
+          magFilter: THREE.NearestFilter,
+          format: THREE.RGBAFormat,
+          depthBuffer: true,
+        });
+        const maxSamples = (renderer.capabilities && renderer.capabilities.maxSamples) || 4;
+        t.samples = Math.max(2, Math.min(4, maxSamples));
+        pixelState.target = t;
+      } else {
+        const depth = new THREE.DepthTexture(targetW, targetH);
+        depth.format = THREE.DepthFormat;
+        depth.type = THREE.UnsignedShortType;
+        pixelState.target = new THREE.WebGLRenderTarget(targetW, targetH, {
+          minFilter: THREE.NearestFilter,
+          magFilter: THREE.NearestFilter,
+          format: THREE.RGBAFormat,
+          depthBuffer: true,
+          depthTexture: depth,
+        });
+      }
+      pixelState.targetMode = wantMode;
     } else if (pixelState.target.width !== targetW || pixelState.target.height !== targetH) {
       pixelState.target.setSize(targetW, targetH);
     }
@@ -1336,9 +1366,10 @@
     }
     const size = renderer.getDrawingBufferSize(renderBufferSizeVec);
     const wantNormals = usePixelation && renderPixelNormalEdge > 0.001;
+    const wantDepthEdge = usePixelation && renderPixelDepthEdge > 0.001;
     const postPixelSize = usePixelation ? effectivePixelSizeForZoom(renderPixelSize) : 1;
     const ensureStart = repaintProfileBegin();
-    ensurePixelResources(size.x, size.y, postPixelSize, wantNormals);
+    ensurePixelResources(size.x, size.y, postPixelSize, wantNormals, wantDepthEdge);
     repaintProfileEnd('post.ensure', ensureStart);
     const prevTarget = renderer.getRenderTarget();
     renderer.setRenderTarget(pixelState.target);
@@ -1373,7 +1404,9 @@
     }
     const uniforms = pixelState.quadMaterial.uniforms;
     uniforms.tColor.value = pixelState.target.texture;
-    uniforms.tDepth.value = pixelState.target.depthTexture;
+    // MSAA targets have no sampleable depth texture; depth edges are disabled in
+    // that mode, so point the (unused) uniform at the colour texture as a dummy.
+    uniforms.tDepth.value = pixelState.target.depthTexture || pixelState.target.texture;
     uniforms.tNormal.value = wantNormals && pixelState.normalTarget ? pixelState.normalTarget.texture : null;
     uniforms.depthEdgeStrength.value = usePixelation ? renderPixelDepthEdge : 0;
     uniforms.normalEdgeStrength.value = usePixelation ? renderPixelNormalEdge : 0;

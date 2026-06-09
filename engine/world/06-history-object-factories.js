@@ -221,6 +221,7 @@
           const riserGeo = getOpenBoxGeometry(riserSize, riserHeight, riserSize, true, true, skipE, skipW, skipS, skipN);
           const riser = new THREE.Mesh(riserGeo, riserMat);
           riser.position.y = -DIRT_H + riserHeight * 0.5;
+          riser.userData.noReceiveShadow = true;
           g.add(riser);
           const bottom = new THREE.Mesh(getOpenBoxGeometry(riserSize, 0.012, riserSize, false, true, true, true, true, true), riserMat);
           bottom.position.y = -DIRT_H - 0.006;

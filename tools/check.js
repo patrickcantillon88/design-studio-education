@@ -672,13 +672,6 @@ const islandProxyBody = sourceFunctionBody(html, 'makeEditableIslandProxy');
 if (!/islandShellMaterial\(M\.grass\)/.test(islandProxyBody) || !/islandShellMaterial\(M\.dirtRich\)/.test(islandProxyBody) || !/node\.frustumCulled = false/.test(islandProxyBody)) {
   fail('editable island proxies must keep double-sided, group-culled side shells');
 }
-const islandSideBackingBody = sourceFunctionBody(html, 'addIslandSideBacking');
-if (!/islandShellMaterial\(M\.(?:boardSide|boardSideEdge \|\| M\.boardSide)\)/.test(islandSideBackingBody) || !/skipTop: true, skipBottom: true/.test(islandSideBackingBody)) {
-  fail('floating island side backing must keep a cheap double-sided wall behind edge greebles');
-}
-if (!/const wallTopY = ISLAND_SIDE_STRATA_RENDER_TOP_Y/.test(islandSideBackingBody) || !/const wallH = ISLAND_SIDE_STRATA_RENDER_HEIGHT/.test(islandSideBackingBody)) {
-  fail('floating island side backing must use the shared raised strata render bounds so the grass-cap edge does not show a sliver');
-}
 const prepareHomeBorderBody = sourceFunctionBody(html, 'prepareHomeBorderForRender');
 if (!/c\.frustumCulled = false/.test(prepareHomeBorderBody)) {
   fail('floating island base shells must rely on group culling, not per-mesh clipping');
@@ -716,9 +709,6 @@ const homeBorderBody = sourceFunctionBody(html, 'buildHomeBorder');
 const editableIslandBaseBody = sourceFunctionBody(html, 'makeEditableIslandBase');
 if (!/M\.islandUnderD, \{ noGap: true, skipTop: true \}/.test(homeBorderBody) || !/M\.islandUnderD, \{ noGap: true, skipTop: true \}/.test(editableIslandBaseBody)) {
   fail('home and duplicate island underside slabs must strip internal top faces');
-}
-if (!/addIslandSideBacking\(homeBorderGroup\)/.test(homeBorderBody) || !/addIslandSideBacking\(g\)/.test(editableIslandBaseBody)) {
-  fail('home and duplicate island bases must include persistent side backing behind edge greebles');
 }
 if (!/sky-gradient-bubble/.test(html) || !/new THREE\.SphereGeometry\(120, 32, 16\)/.test(html) || !/THREE\.BackSide/.test(html)) {
   fail('background must include the inside-facing shader sphere gradient bubble');

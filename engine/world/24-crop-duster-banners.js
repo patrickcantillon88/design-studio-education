@@ -543,6 +543,7 @@
             const parentMat = o.material;
             o.material = o.material.clone();
             if (parentMat.onBeforeCompile) o.material.onBeforeCompile = parentMat.onBeforeCompile;
+            if (typeof parentMat.customProgramCacheKey === 'function') o.material.customProgramCacheKey = parentMat.customProgramCacheKey;
           }
           o.userData.__propAxis = 'z';
           p.props.push(o);

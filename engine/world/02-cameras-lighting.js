@@ -76,6 +76,7 @@
     }
     camera.lookAt(target);
     if (typeof updateSunFollow === 'function') updateSunFollow();
+    if (typeof updateTerrainShadowReceiversForCamera === 'function') updateTerrainShadowReceiversForCamera();
     if (typeof updateSkyBubble === 'function') updateSkyBubble();
     applyDistanceMistSettings();
     scheduleCameraStateSave();
