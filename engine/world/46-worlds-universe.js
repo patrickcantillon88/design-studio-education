@@ -108,6 +108,9 @@
     backdrop-filter:blur(18px) saturate(150%);-webkit-backdrop-filter:blur(18px) saturate(150%);
     box-shadow:inset 0 1px 0 rgba(120,150,230,.14),0 20px 40px -16px rgba(0,0,20,.55),0 4px 8px -4px rgba(0,0,0,.28);transition:transform .06s,box-shadow .12s}
   .tw-worlds-card:hover{transform:translateY(-2px);box-shadow:inset 0 1px 0 rgba(120,150,230,.22),0 24px 48px -14px rgba(0,0,25,.65),0 6px 12px -4px rgba(0,0,0,.32)}
+  /* Locked worlds — greyed out and non-interactive (only the demo world is playable for now). */
+  .tw-worlds-card.tw-worlds-locked{opacity:.42;filter:grayscale(.9);pointer-events:none}
+  .tw-worlds-card.tw-worlds-locked:hover{transform:none}
   .tw-worlds-prev{width:100%;aspect-ratio:16/10;border-radius:8px;background:#05070e;image-rendering:pixelated;display:block;
     box-shadow:0 2px 8px -2px rgba(0,0,0,.5)}
   .tw-worlds-card h3{margin:2px 0;font-size:15px;text-transform:uppercase;letter-spacing:.04em;display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -199,6 +202,10 @@
     }
   
     function renderCard(w) {
+      // Only the demo world (Tidewater Bay) is playable for now; everything else
+      // is greyed out and non-interactive, and no costs are shown anywhere.
+      const isDemo = w.slug === 'tidewater-bay';
+      const locked = !isDemo;
       const mine = me && w.ownerProfileId != null && Number(w.ownerProfileId) === Number(me.id);
       const meta = el('div', { class: 'tw-worlds-meta' }, [
         el('div', {}, [el('b', { text: T('worlds.tiles') + ': ' }), document.createTextNode(String(w.tileCount))]),
@@ -208,7 +215,7 @@
       ]);
       const actions = el('div', { class: 'tw-worlds-actions' });
       if (w.status === 'unclaimed') {
-        meta.appendChild(el('div', {}, [el('b', { text: T('worlds.price') + ': ' }), document.createTextNode(w.priceUsdc + ' USDC')]));
+        // Cost intentionally hidden.
         actions.appendChild(el('button', { class: 'tw-btn', text: T('worlds.buy'), onclick: () => buyFlow(w) }));
       } else if (w.status === 'published') {
         actions.appendChild(el('button', { class: 'tw-btn go', text: T('worlds.enter'), onclick: () => enterWorld(w) }));
@@ -217,12 +224,17 @@
         actions.appendChild(el('button', { class: 'tw-btn', text: T('worlds.build'), onclick: () => buildDraft(w) }));
         actions.appendChild(el('button', { class: 'tw-btn alt', text: T('worlds.manage'), onclick: () => manageFlow(w) }));
       }
-      const title = w.name || (w.kind === 'starter' ? w.slug : T('worlds.statusUnclaimed'));
+      const baseTitle = w.name || (w.kind === 'starter' ? w.slug : T('worlds.statusUnclaimed'));
+      const title = baseTitle + (isDemo ? ' (demo)' : '');
       const prev = el('canvas', { class: 'tw-worlds-prev', width: '320', height: '200' });
-      const card = el('div', { class: 'tw-worlds-card' }, [
+      const card = el('div', { class: 'tw-worlds-card' + (locked ? ' tw-worlds-locked' : '') }, [
         prev,
         el('h3', {}, [document.createTextNode(title), statusBadge(w.status)]), meta, actions,
       ]);
+      if (locked) {
+        card.setAttribute('aria-disabled', 'true');
+        actions.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+      }
       // Isometric 2D preview of the world's tiles.
       if (typeof WS.renderPreview === 'function') {
         const preview = Object.assign({ gridSize: w.gridSize, cells: [], slug: w.slug, name: w.name, id: w.id }, w.preview || {});

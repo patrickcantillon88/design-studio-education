@@ -22,6 +22,12 @@ Running log of UI elements hidden "for now". Each entry says exactly how to rest
 - **How it's hidden:** `#welcome-play { display: none !important; }`, and `#welcome-build { grid-column: 1 / -1; }` makes **Build** span the whole bottom row.
 - **Restore:** delete those two rules.
 
+### 4. Avatar picker categories — Pets / Warriors / Orcs
+- **What:** the `pets`, `warriors`, and `orcs` avatar provider tabs in the avatar picker. Only **Voxel** remains (and it's the default).
+- **Where:** `engine/world/49-worlds-avatar-picker.js` — the three `WS.registerAvatarProvider(...)` calls are commented out (`REMOVED:` notes). The `PETS` / `STRIP_PACKS` data is kept.
+- **Also:** `renderTabs()` now hides the tab bar when only one visible category remains (goes straight to the Voxel customizer).
+- **Restore:** un-comment the three registrations.
+
 ## Related items already hidden previously (not changed in this pass)
 
 - **Mesh Terrain standalone toggle button** (`mesh-terrain-toggle`) — `engine/world/46-mesh-terrain.js`, `toggleBtn.style.display = 'none'` (commented "hidden for now"). Restore: remove that line.

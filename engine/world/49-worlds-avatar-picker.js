@@ -85,15 +85,17 @@
       return "background-image:url('" + p.dir + p.sheet + "');background-repeat:no-repeat;background-size:" +
         Math.round(p.cols * p.fw * sc) + "px " + Math.round(p.rows * p.fh * sc) + "px;background-position:0 0";
     }
-    if (PETS.length) {
-      WS.registerAvatarProvider({
-        id: 'pets',
-        label: T('worlds.avatarPets'),
-        list() { return PETS.map(p => ({ id: p.id, displayName: p.displayName, builtIn: false, broken: false, thumb: petThumb(p) })); },
-        current() { return (typeof WS.avatarPet === 'function') ? WS.avatarPet() : null; },
-        select(id) { if (typeof WS.setAvatarPet === 'function') WS.setAvatarPet(id); },
-      });
-    }
+    // REMOVED: the 'pets' avatar category is hidden from the picker for now.
+    // Re-enable by un-commenting this registration (PETS data above is kept).
+    // if (PETS.length) {
+    //   WS.registerAvatarProvider({
+    //     id: 'pets',
+    //     label: T('worlds.avatarPets'),
+    //     list() { return PETS.map(p => ({ id: p.id, displayName: p.displayName, builtIn: false, broken: false, thumb: petThumb(p) })); },
+    //     current() { return (typeof WS.avatarPet === 'function') ? WS.avatarPet() : null; },
+    //     select(id) { if (typeof WS.setAvatarPet === 'function') WS.setAvatarPet(id); },
+    //   });
+    // }
 
     // Side-view STRIP packs (driven by WS.setAvatarStrip / WS.avatarStrip / WS.strips in
     // 47). Each `idle` sheet is a 64px grid: columns are frames, rows are
@@ -120,20 +122,23 @@
       return "background-image:url('" + p.idle + "');background-repeat:no-repeat;background-size:" +
         Math.round(p.idleFrames * 64 * sc) + "px " + Math.round(256 * sc) + "px;background-position:0 0";
     }
-    WS.registerAvatarProvider({
-      id: 'warriors',
-      label: T('worlds.avatarWarriors'),
-      list() { return STRIP_PACKS.warriors.map(p => ({ id: p.id, displayName: p.displayName, builtIn: false, broken: false, thumb: stripThumb(p) })); },
-      current() { return (typeof WS.avatarStrip === 'function') ? WS.avatarStrip() : null; },
-      select(id) { if (typeof WS.setAvatarStrip === 'function') WS.setAvatarStrip(id); },
-    });
-    WS.registerAvatarProvider({
-      id: 'orcs',
-      label: T('worlds.avatarOrcs'),
-      list() { return STRIP_PACKS.orcs.map(p => ({ id: p.id, displayName: p.displayName, builtIn: false, broken: false, thumb: stripThumb(p) })); },
-      current() { return (typeof WS.avatarStrip === 'function') ? WS.avatarStrip() : null; },
-      select(id) { if (typeof WS.setAvatarStrip === 'function') WS.setAvatarStrip(id); },
-    });
+    // REMOVED: the 'warriors' and 'orcs' avatar categories are hidden from the
+    // picker for now. Re-enable by un-commenting these registrations (the
+    // STRIP_PACKS data above is kept).
+    // WS.registerAvatarProvider({
+    //   id: 'warriors',
+    //   label: T('worlds.avatarWarriors'),
+    //   list() { return STRIP_PACKS.warriors.map(p => ({ id: p.id, displayName: p.displayName, builtIn: false, broken: false, thumb: stripThumb(p) })); },
+    //   current() { return (typeof WS.avatarStrip === 'function') ? WS.avatarStrip() : null; },
+    //   select(id) { if (typeof WS.setAvatarStrip === 'function') WS.setAvatarStrip(id); },
+    // });
+    // WS.registerAvatarProvider({
+    //   id: 'orcs',
+    //   label: T('worlds.avatarOrcs'),
+    //   list() { return STRIP_PACKS.orcs.map(p => ({ id: p.id, displayName: p.displayName, builtIn: false, broken: false, thumb: stripThumb(p) })); },
+    //   current() { return (typeof WS.avatarStrip === 'function') ? WS.avatarStrip() : null; },
+    //   select(id) { if (typeof WS.setAvatarStrip === 'function') WS.setAvatarStrip(id); },
+    // });
 
     // ---- voxel avatars (real 3D voxel people — the networked identity) ----
     // Drives WS.setAvatarVoxel / WS.avatarVoxel (47), which stores a fully-resolved
@@ -367,9 +372,13 @@
         class: 'tw-avp-vox-use', onclick: () => {
           if (typeof WS.setAvatarVoxel === 'function') WS.setAvatarVoxel(voxelDesc({ ...state }));
           voxelCurrentId = null;
-          if (typeof window.twToast === 'function') window.twToast(trVoxel('worlds.avatarApplied', 'Look applied'));
+          if (typeof window.twToast === 'function') window.twToast(trVoxel('worlds.avatarApplied', 'Avatar saved'));
+          // Signal a deliberate save BEFORE closing so a pending entry flow
+          // (Tinyverse gate) resolves on save, not on the trailing close event.
+          try { window.dispatchEvent(new CustomEvent('tinyworld:avatar-saved')); } catch (_) {}
+          closePicker();
         },
-      }, [trVoxel('worlds.avatarUseLook', 'Use This Look')]);
+      }, [trVoxel('worlds.avatarUseLook', 'Save Avatar')]);
       const randBtn = el('button', {
         class: 'tw-avp-vox-rand', onclick: () => {
           applyResolved(voxelDesc({
@@ -415,20 +424,20 @@
   .tw-avp-vox-controls{display:flex;flex-direction:column;gap:6px}
   .tw-avp-vox-row{display:grid;grid-template-columns:1fr auto auto auto;align-items:center;gap:6px;background:#0e1120;padding:5px 8px;border-radius:8px;
     box-shadow:inset 1px 1px 0 #2b3350, inset -1px -1px 0 #05070e}
-  .tw-avp-vox-lab{text-transform:uppercase;letter-spacing:.05em;font-size:10px;color:#cfd8f5}
-  .tw-avp-vox-val{min-width:92px;text-align:center;font-size:11px;color:#fff}
-  .tw-avp-vox-arrow{border:0;cursor:pointer;color:#fff;background:#2b59d6;width:24px;height:24px;border-radius:6px;font-size:14px;line-height:1;
+  .tw-avp-vox-lab{text-transform:uppercase;letter-spacing:.05em;font-size:12px;color:#cfd8f5}
+  .tw-avp-vox-val{min-width:108px;text-align:center;font-size:13px;color:#fff}
+  .tw-avp-vox-arrow{border:0;cursor:pointer;color:#fff;background:#2b59d6;width:28px;height:28px;border-radius:6px;font-size:16px;line-height:1;
     box-shadow:inset 1px 1px 0 rgba(255,255,255,.25), inset -1px -1px 0 rgba(0,0,0,.45);transition:filter .08s,transform .04s}
   .tw-avp-vox-arrow:hover{filter:brightness(1.15)} .tw-avp-vox-arrow:active{transform:translateY(1px)}
   .tw-avp-vox-btns{display:flex;gap:8px;margin-top:2px}
-  .tw-avp-vox-use{flex:1;border:0;cursor:pointer;color:#fff;background:#54bd37;padding:9px;border-radius:8px;text-transform:uppercase;letter-spacing:.06em;font-size:11px;
+  .tw-avp-vox-use{flex:1;border:0;cursor:pointer;color:#fff;background:#54bd37;padding:11px;border-radius:8px;text-transform:uppercase;letter-spacing:.06em;font-size:13px;
     box-shadow:inset 2px 2px 0 rgba(255,255,255,.30), inset -2px -2px 0 rgba(0,0,0,.40), 0 2px 0 0 rgba(0,0,0,.4);transition:filter .08s,transform .04s}
   .tw-avp-vox-use:hover{filter:brightness(1.12)} .tw-avp-vox-use:active{transform:translateY(1px)}
-  .tw-avp-vox-rand{border:0;cursor:pointer;color:#fff;background:#222a42;padding:9px 12px;border-radius:8px;text-transform:uppercase;letter-spacing:.06em;font-size:11px;
+  .tw-avp-vox-rand{border:0;cursor:pointer;color:#fff;background:#222a42;padding:11px 14px;border-radius:8px;text-transform:uppercase;letter-spacing:.06em;font-size:13px;
     box-shadow:inset 2px 2px 0 rgba(255,255,255,.16), inset -2px -2px 0 rgba(0,0,0,.45);transition:filter .08s}
   .tw-avp-vox-rand:hover{filter:brightness(1.15)}
   .tw-avp-vox-quick{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
-  .tw-avp-vox-chip{border:0;cursor:pointer;color:#fff;font-size:9px;padding:5px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:.04em;
+  .tw-avp-vox-chip{border:0;cursor:pointer;color:#fff;font-size:11px;padding:7px 10px;border-radius:6px;text-transform:uppercase;letter-spacing:.04em;
     text-shadow:0 1px 1px rgba(0,0,0,.6);box-shadow:inset 1px 1px 0 rgba(255,255,255,.18), inset -1px -1px 0 rgba(0,0,0,.5)}
   .tw-avp-vox-chip:hover{filter:brightness(1.15)}
   `;
@@ -440,8 +449,8 @@
       const css = `
   .tw-avp-backdrop{position:fixed;inset:0;z-index:95;display:none;align-items:center;justify-content:center;background:rgba(5,7,14,.62)}
   .tw-avp-backdrop.open{display:flex}
-  .tw-avp{width:min(680px,94vw);max-height:86vh;overflow:auto;background:#161a2b;color:#eef3ff;
-    font:700 12px 'Pixelify Sans',ui-monospace,'SF Mono',Menlo,monospace;letter-spacing:.04em;padding:16px 16px 18px;border-radius:4px;
+  .tw-avp{width:min(760px,94vw);max-height:86vh;overflow:auto;background:#161a2b;color:#eef3ff;
+    font:700 13px 'Pixelify Sans',ui-monospace,'SF Mono',Menlo,monospace;letter-spacing:.04em;padding:18px 18px 20px;border-radius:4px;
     box-shadow:0 0 0 2px #05070e, inset 2px 2px 0 #38415f, inset -2px -2px 0 #0a0d18}
   .tw-avp-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
   .tw-avp-title{font-size:15px;text-transform:uppercase;letter-spacing:.08em;text-shadow:1px 1px 0 #05070e}
@@ -471,6 +480,17 @@
   .tw-avp-card.sel .tw-avp-pick{background:#243a52;color:#9bf05a}
   .tw-avp-badge{position:absolute;top:8px;right:8px;font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:#9bf05a;background:#05140a;padding:2px 5px;border-radius:2px}
   .tw-avp-empty{opacity:.7;text-align:center;padding:24px 8px;text-transform:uppercase;letter-spacing:.05em;font-size:11px}
+  /* Roomier dialog + larger type on desktop. */
+  @media (min-width:1024px){
+    .tw-avp{width:min(920px,90vw);font-size:14px;padding:24px 24px 26px}
+    .tw-avp-title{font-size:20px}
+    .tw-avp-tab{font-size:13px;padding:9px 16px}
+    .tw-avp-vox{gap:20px}
+    .tw-avp-vox-lab{font-size:13px}
+    .tw-avp-vox-val{font-size:14px;min-width:120px}
+    .tw-avp-vox-use,.tw-avp-vox-rand{font-size:14px}
+    .tw-avp-vox-chip{font-size:12px}
+  }
   `;
       document.head.appendChild(el('style', { id: 'tw-avp-style', text: css }));
     }
@@ -499,9 +519,11 @@
     function renderTabs() {
       if (!tabsEl) return;
       tabsEl.textContent = '';
-      // Only show the tab bar when more than one category exists (e.g. once an
-      // open-pets pet provider is registered alongside the built-in classes).
-      tabsEl.style.display = providers.length > 1 ? '' : 'none';
+      // Only show the tab bar when more than one *visible* category exists.
+      // 'classes' is never rendered as a tab, so a lone remaining category
+      // (e.g. only 'voxel') shows no tab bar — straight to its customizer.
+      const visibleTabs = providers.filter(p => p.id !== 'classes').length;
+      tabsEl.style.display = visibleTabs > 1 ? '' : 'none';
       if (!activeProvider()) activeProviderId = (providers[0] && providers[0].id) || 'classes';
       providers.forEach(p => {
         if (p.id === 'classes') return;
@@ -566,7 +588,11 @@
       renderGrid();
       picker.classList.add('open');
     }
-    function closePicker() { if (picker) picker.classList.remove('open'); if (voxelPreview) voxelPreview.stop(); }
+    function closePicker() {
+      if (picker) picker.classList.remove('open');
+      if (voxelPreview) voxelPreview.stop();
+      try { window.dispatchEvent(new CustomEvent('tinyworld:avatar-picker-closed')); } catch (_) {}
+    }
 
     WS.openAvatarPicker = openPicker;
     WS.closeAvatarPicker = closePicker;

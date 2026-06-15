@@ -1733,6 +1733,14 @@
         : desc;
       selfAvatarDescriptor = resolved;
       writeStoredAvatarDescriptor(resolved);
+      // Persist to the logged-in account so the chosen look follows the player
+      // across devices. Fire-and-forget — the local write above is the offline
+      // source of truth; a failed save just isn't cross-device until next save.
+      try {
+        if (typeof window !== 'undefined' && window.__loggedIn && typeof window.__tinyworldCloudApiCall === 'function') {
+          window.__tinyworldCloudApiCall('/api/avatar', 'PUT', { avatar: resolved }).catch(() => {});
+        }
+      } catch (_) {}
       if (selfEnt) { disposeEntity(selfEnt); selfEnt = null; updateSelfAvatar(); }
       try { if (connected && socket && socket.readyState === WebSocket.OPEN) send({ type: 'world.avatar', avatar: resolved }); } catch (_) {}
       return selfAvatarDescriptor;

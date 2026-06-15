@@ -70,21 +70,98 @@
       }
       closeWelcome();
     };
-    const openTinyverse = async () => {
-      setTinyverseLoading(true);
-      const worlds = await waitForWorldsFrontend();
+    // Flow: Tinyverse > Login > (if the account has no saved avatar) Select
+    // Avatar > Worlds list. Login wires into the existing auth modal; the avatar
+    // gate is account-scoped (GET /api/avatar) with a localStorage fallback so
+    // local/no-auth dev and cloud outages never strand the flow.
+    const AVATAR_LS_KEY = 'tinyworld:multiplayer:avatar-voxel';
+    const localHasAvatar = () => {
+      try { return !!localStorage.getItem(AVATAR_LS_KEY); } catch (_) { return false; }
+    };
+    // Resolve "does this account need to pick an avatar?". Authoritative server
+    // read with a 4s timeout; any failure/unavailable falls back to localStorage
+    // presence so the spinner never hangs.
+    const accountNeedsAvatar = async () => {
+      const api = window.__tinyworldCloudApiCall;
+      if (!window.__loggedIn || typeof api !== 'function') return !localHasAvatar();
+      let res;
       try {
-        if (worlds) {
-          worlds.open();
-          closeWelcome();
+        res = await Promise.race([
+          api('/api/avatar', 'GET'),
+          new Promise(resolve => setTimeout(() => resolve({ __timeout: true }), 4000)),
+        ]);
+      } catch (_) { res = null; }
+      if (!res || res.__timeout || res.error || res.cloudUnavailable) return !localHasAvatar();
+      if (res.avatar && typeof res.avatar === 'object') {
+        // Hydrate the local look so the room renders the account's avatar.
+        try { localStorage.setItem(AVATAR_LS_KEY, JSON.stringify(res.avatar)); } catch (_) {}
+        return false;
+      }
+      return true;
+    };
+    // Open the avatar picker and resolve true on a deliberate Save, false if the
+    // user closes it without saving. Guarded so the trailing close event that a
+    // save also fires can't flip the result.
+    const promptAvatarSelection = () => new Promise(resolve => {
+      const WS = window.__tinyworldWorlds;
+      if (!WS || typeof WS.openAvatarPicker !== 'function') { resolve(true); return; }
+      let done = false;
+      const finish = (ok) => {
+        if (done) return;
+        done = true;
+        window.removeEventListener('tinyworld:avatar-saved', onSaved);
+        window.removeEventListener('tinyworld:avatar-picker-closed', onClosed);
+        resolve(ok);
+      };
+      const onSaved = () => finish(true);
+      const onClosed = () => finish(false);
+      window.addEventListener('tinyworld:avatar-saved', onSaved);
+      window.addEventListener('tinyworld:avatar-picker-closed', onClosed);
+      try { WS.openAvatarPicker(); } catch (_) { finish(true); }
+    });
+    let tinyverseOpening = false;
+    const openTinyverse = async () => {
+      if (tinyverseOpening) return;
+      tinyverseOpening = true;
+      try {
+        // 1. Login gate — defer entry until logged in, then resume (enterApp).
+        if (!window.__loggedIn) {
+          if (typeof window.__openLoginModal === 'function') {
+            window.__tinyversePendingEntry = true;
+            // Auth prompts stay in English per the i18n scope rules.
+            window.__openLoginModal('Sign in to enter Tinyverse');
+          } else {
+            showTinyverseUnavailable();
+          }
           return;
         }
-      } catch (err) {
-        console.warn('[welcome] Tinyverse failed to open:', err);
+        setTinyverseLoading(true);
+        const worlds = await waitForWorldsFrontend();
+        if (!worlds) { setTinyverseLoading(false); showTinyverseUnavailable(); return; }
+        // 2. Avatar gate — first-timers pick a look before seeing the list.
+        let needsAvatar = false;
+        try { needsAvatar = await accountNeedsAvatar(); } catch (_) { needsAvatar = false; }
+        if (needsAvatar) {
+          setTinyverseLoading(false);
+          const picked = await promptAvatarSelection();
+          if (!picked) return; // closed without saving — stay on welcome
+          setTinyverseLoading(true);
+        }
+        // 3. Worlds list.
+        try {
+          worlds.open();
+          closeWelcome();
+        } catch (err) {
+          console.warn('[welcome] Tinyverse failed to open:', err);
+          setTinyverseLoading(false);
+          showTinyverseUnavailable();
+        }
+      } finally {
+        tinyverseOpening = false;
       }
-      setTinyverseLoading(false);
-      showTinyverseUnavailable();
     };
+    // Let the login-success path (enterApp, another closure) resume this flow.
+    window.__tinyverseEnter = openTinyverse;
     const openBattleworlds = () => {
       const battleworlds = window.__tinyworldBattleworlds;
       if (battleworlds && typeof battleworlds.open === 'function') {
@@ -700,12 +777,25 @@
     Storage.prototype.__twPrefSyncPatched = true;
   }
 
+  // Pull the account's saved voxel avatar into localStorage so any entry path
+  // (incl. share links that skip the welcome flow) renders the right look.
+  async function twCloudHydrateAvatar() {
+    if (!twCloudLoggedIn()) return;
+    try {
+      const res = await twCloudApiCall('/api/avatar', 'GET');
+      if (res && !res.error && res.avatar && typeof res.avatar === 'object') {
+        try { localStorage.setItem('tinyworld:multiplayer:avatar-voxel', JSON.stringify(res.avatar)); } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
   async function twCloudBootstrapSync() {
     if (!twCloudLoggedIn()) return;
     await Promise.all([
       twCloudSyncLocalWorldsToCloud({ includeCurrent: true }),
       twCloudSyncAssetsBothWays(),
       twCloudSyncPreferencesBothWays(),
+      twCloudHydrateAvatar(),
     ]);
   }
 
@@ -1270,6 +1360,12 @@
       bootApp();
       initAccountModal();
       twCloudBootstrapSync().catch(err => console.warn('[cloud-sync] bootstrap failed:', err));
+      // Resume a pending Tinyverse entry that was waiting on login. Independent
+      // of the bootstrap sync above; the avatar gate does its own server read.
+      if (window.__tinyversePendingEntry) {
+        window.__tinyversePendingEntry = false;
+        if (typeof window.__tinyverseEnter === 'function') setTimeout(() => window.__tinyverseEnter(), 0);
+      }
     }
 
     function enterAnonApp() {
