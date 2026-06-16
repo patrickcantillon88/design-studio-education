@@ -9,6 +9,7 @@ import {
   AVATAR_KEYS,
   normalizeForSafety,
   checkTextSafety,
+  capabilitiesFor,
 } from '../netlify/functions/community.mjs';
 
 // -------- social handles --------
@@ -79,4 +80,21 @@ test('normalizeForSafety collapses leet + punctuation to a-z', () => {
 test('clean profile text passes', () => {
   assert.equal(checkTextSafety('Friendly world builder from Essex', 'bio').ok, true);
   assert.equal(checkTextSafety('', 'bio').ok, true);
+});
+
+// -------- community role capabilities --------
+test('moderator role can moderate messages without becoming full admin', () => {
+  const caps = capabilitiesFor(['moderator']);
+  assert.equal(caps.canModerate, true);
+  assert.equal(caps.canCreateChannels, true);
+  assert.equal(caps.canManageRoles, false);
+  assert.equal(caps.isAdmin, false);
+});
+
+test('super-admin capabilities imply moderation and role management', () => {
+  const caps = capabilitiesFor([], true);
+  assert.equal(caps.isAdmin, true);
+  assert.equal(caps.canModerate, true);
+  assert.equal(caps.canCreateChannels, true);
+  assert.equal(caps.canManageRoles, true);
 });

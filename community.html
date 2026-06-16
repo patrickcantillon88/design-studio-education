@@ -195,11 +195,19 @@
   .chat-head .head-actions { margin-left: auto; display: flex; gap: 6px; }
   .chat-scroll { flex: 1 1 auto; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
   .msg { display: flex; gap: 11px; }
-  .msg .body { min-width: 0; }
+  .msg.hidden-message { opacity: 0.76; }
+  .msg .body { min-width: 0; flex: 1 1 auto; }
   .msg .by { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
   .msg .by strong { font-size: 14px; }
   .msg .by time { font-size: 11px; color: var(--muted); }
   .msg .text { font-size: 14px; line-height: 1.5; color: var(--ink); word-wrap: break-word; overflow-wrap: anywhere; white-space: pre-wrap; }
+  .msg.hidden-message .text { color: #576174; font-style: italic; }
+  .msg-hidden-badge { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #7a5a1a; background: rgba(255,199,93,0.20); border: 1px solid rgba(170,113,25,0.22); border-radius: 999px; padding: 2px 7px; }
+  .msg-mod-actions { margin-left: auto; display: inline-flex; gap: 5px; opacity: 0; transition: opacity .15s; }
+  .msg:hover .msg-mod-actions, .msg:focus-within .msg-mod-actions { opacity: 1; }
+  .msg-mod-btn { border: 1px solid var(--line); background: rgba(255,255,255,0.78); color: var(--ink); border-radius: 999px; height: 24px; padding: 0 8px; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+  .msg-mod-btn:hover { filter: brightness(0.97); }
+  .msg-mod-btn.danger { color: #c0392b; border-color: #f0d2d2; background: #fff5f5; }
   .chat-empty { margin: auto; text-align: center; color: var(--muted); font-size: 14px; padding: 40px; }
 
   .composer { border-top: 1px solid var(--line); padding: 12px 16px; display: flex; gap: 10px; align-items: flex-end; }
@@ -245,7 +253,7 @@
   }
   .c-modal h2 { margin: 0; font-size: 20px; color: var(--ink); font-family: var(--display-font); }
   .c-modal label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--ink); }
-  .c-modal input[type=text], .c-modal textarea, .c-modal select {
+  .c-modal input[type=text], .c-modal input[type=password], .c-modal textarea, .c-modal select {
     width: 100%; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--line);
     font-family: inherit; font-size: 14px; color: var(--ink); background: #fff;
   }
@@ -774,6 +782,7 @@
     let verifyCountdownTimer = null;
     const state = {
       me: null, admin: false, verified: false,
+      caps: {}, roleOptions: [],
       rooms: [], members: [], dms: [], blocks: [],
       sel: null, // { type: 'room'|'dm', id } — id is roomId or other-profile-id
       messages: [], pollTimer: null, lastFocus: null,
@@ -822,6 +831,13 @@
 
     function currentRoom() { return state.sel && state.sel.type === 'room' ? state.rooms.find(r => r.id === state.sel.id) : null; }
     function memberById(id) { return state.members.find(m => m.id === id) || null; }
+    function hasCap(name) { return !!(state.admin || (state.caps && state.caps[name])); }
+    function canModerateCurrentConversation() {
+      if (!state.sel) return false;
+      if (state.sel.type === 'dm') return hasCap('canModerate');
+      const r = currentRoom();
+      return !!(hasCap('canModerate') || (r && (r.role === 'owner' || r.role === 'mod')));
+    }
 
     function renderChatHead() {
       const head = byId('chat-head');
@@ -833,7 +849,7 @@
         if (isOwnerMod || state.admin) actions += '<button class="icon-btn" id="room-invite-btn" title="Create invite" aria-label="Invite"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></svg></button>';
         if (r.role && r.role !== 'owner') actions += '<button class="icon-btn" id="room-leave-btn" title="Leave room" aria-label="Leave"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></button>';
         else if (!r.role) actions += '<button class="btn sm primary" id="room-join-btn">Join</button>';
-        if (r.role === 'owner' || state.admin) actions += '<button class="icon-btn danger-icon" id="room-delete-btn" title="Delete channel" aria-label="Delete channel"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>';
+        if (r.role === 'owner' || hasCap('canModerate')) actions += '<button class="icon-btn danger-icon" id="room-delete-btn" title="Delete channel" aria-label="Delete channel"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>';
         head.innerHTML = '<div class="title"><strong>' + (r.isPrivate ? '' : '# ') + esc(r.name) + (r.role ? ' <span class="pill role">' + esc(r.role) + '</span>' : '') + '</strong><span>' + esc(r.topic || 'No topic set') + '</span></div><div class="head-actions">' + actions + '</div>';
         const ib = byId('room-invite-btn'); if (ib) ib.addEventListener('click', () => openInvite(r));
         const lb = byId('room-leave-btn'); if (lb) lb.addEventListener('click', () => leaveRoom(r.id));
@@ -852,10 +868,25 @@
       if (!state.sel) { el.innerHTML = '<div class="chat-empty">No channel selected yet.</div>'; return; }
       if (!state.messages.length) { el.innerHTML = '<div class="chat-empty">No messages yet. Be the first to say hello.</div>'; return; }
       const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-      el.innerHTML = state.messages.map(m =>
-        '<div class="msg">' + avatarHTML(m.author) +
-        '<div class="body"><div class="by"><strong>' + esc(m.author.displayName || m.author.username) + '</strong><time>' + esc(fmtTime(m.createdAt)) + '</time></div>' +
-        '<div class="text">' + esc(m.body) + '</div></div></div>').join('');
+      const canMod = canModerateCurrentConversation();
+      el.innerHTML = state.messages.map(m => {
+        const hiddenClass = m.hidden ? ' hidden-message' : '';
+        const hiddenBadge = m.hidden ? '<span class="msg-hidden-badge">Hidden</span>' : '';
+        const actions = canMod
+          ? '<span class="msg-mod-actions">' +
+              (m.hidden
+                ? '<button type="button" class="msg-mod-btn" data-msg-unhide="' + m.id + '">Restore</button>'
+                : '<button type="button" class="msg-mod-btn" data-msg-hide="' + m.id + '">Hide</button>') +
+              '<button type="button" class="msg-mod-btn danger" data-msg-delete="' + m.id + '">Delete</button>' +
+            '</span>'
+          : '';
+        return '<div class="msg' + hiddenClass + '" data-message-id="' + m.id + '">' + avatarHTML(m.author) +
+          '<div class="body"><div class="by"><strong>' + esc(m.author.displayName || m.author.username) + '</strong><time>' + esc(fmtTime(m.createdAt)) + '</time>' + hiddenBadge + actions + '</div>' +
+          '<div class="text">' + esc(m.body) + '</div></div></div>';
+      }).join('');
+      el.querySelectorAll('[data-msg-hide]').forEach(b => b.addEventListener('click', () => moderateMessage(Number(b.dataset.msgHide), 'hideMessage')));
+      el.querySelectorAll('[data-msg-unhide]').forEach(b => b.addEventListener('click', () => moderateMessage(Number(b.dataset.msgUnhide), 'unhideMessage')));
+      el.querySelectorAll('[data-msg-delete]').forEach(b => b.addEventListener('click', () => moderateMessage(Number(b.dataset.msgDelete), 'deleteMessage')));
       if (nearBottom) el.scrollTop = el.scrollHeight;
     }
 
@@ -928,6 +959,22 @@
         composerError(err.error || 'Could not send message.');
       } finally {
         btn.disabled = !input.value.trim();
+      }
+    }
+
+    async function moderateMessage(messageId, action) {
+      if (!messageId || !canModerateCurrentConversation()) return;
+      const message = state.messages.find(m => Number(m.id) === Number(messageId));
+      if (action === 'deleteMessage') {
+        const sample = message && message.body ? ('\n\n"' + message.body.slice(0, 140) + (message.body.length > 140 ? '…' : '') + '"') : '';
+        if (!window.confirm('Permanently delete this message?' + sample)) return;
+      }
+      const payload = { action, messageId };
+      try {
+        await api('/api/community', 'POST', payload);
+        await loadMessages(true);
+      } catch (err) {
+        composerError(err.error || 'Could not moderate message.');
       }
     }
 
@@ -1095,6 +1142,55 @@
     });
 
     let pcMember = null;
+    function roleLabel(role) {
+      return String(role || '').replace(/_/g, ' ');
+    }
+    function rolePillHTML(role) {
+      const safeRole = String(role || '').replace(/[^a-z_]/g, '');
+      return '<span class="pill role role-' + esc(safeRole) + '">' + esc(roleLabel(role)) + '</span>';
+    }
+    function syncMemberRoles(profileId, roles) {
+      const m = memberById(profileId);
+      if (m) m.roles = roles || [];
+      if (pcMember && pcMember.id === profileId) pcMember.roles = roles || [];
+    }
+    function renderProfileRoles(m) {
+      const roles = (m && Array.isArray(m.roles)) ? m.roles : [];
+      const wrap = byId('pc-role-wrap');
+      wrap.innerHTML = roles.map(rolePillHTML).join('');
+      wrap.hidden = !roles.length;
+    }
+    function renderRoleToggles(m) {
+      const panel = byId('pc-roles-admin');
+      const targetId = m && m.id;
+      if (!hasCap('canManageRoles') || !targetId) { panel.hidden = true; return; }
+      const roles = new Set(Array.isArray(m.roles) ? m.roles : []);
+      const options = state.roleOptions && state.roleOptions.length ? state.roleOptions : ['admin', 'moderator', 'channel_creator'];
+      byId('pc-roles-toggles').innerHTML = options.map(role => {
+        const on = roles.has(role);
+        return '<button type="button" class="role-toggle' + (on ? ' on' : '') + '" data-role="' + esc(role) + '" aria-pressed="' + on + '">' + esc(roleLabel(role)) + '</button>';
+      }).join('');
+      byId('pc-roles-toggles').querySelectorAll('[data-role]').forEach(btn => {
+        btn.addEventListener('click', () => toggleMemberRole(targetId, btn.dataset.role, btn.classList.contains('on')));
+      });
+      panel.hidden = false;
+    }
+    async function toggleMemberRole(profileId, role, currentlyOn) {
+      const err = byId('pc-error'); const ok = byId('pc-ok');
+      err.hidden = true; ok.hidden = true;
+      try {
+        const d = await api('/api/community', 'POST', { action: currentlyOn ? 'revokeRole' : 'grantRole', profileId, role });
+        syncMemberRoles(profileId, d.roles || []);
+        renderProfileRoles(pcMember);
+        renderRoleToggles(pcMember);
+        renderMembers();
+        ok.textContent = currentlyOn ? 'Role removed.' : 'Role granted.';
+        ok.hidden = false;
+      } catch (e2) {
+        err.textContent = e2.error || 'Could not update role.';
+        err.hidden = false;
+      }
+    }
     function openProfile(id) {
       const m = memberById(id) || (state.dms.find(d => d.other && d.other.id === id) || {}).other;
       if (!m) return;
@@ -1108,12 +1204,12 @@
       else { about.textContent = 'No bio yet.'; about.classList.add('muted'); }
       renderProfileSocials(m);
       byId('pc-error').hidden = true; byId('pc-ok').hidden = true; byId('pc-ban-form').hidden = true;
-      byId('pc-role-wrap').hidden = true;
+      renderProfileRoles(m);
+      renderRoleToggles(m);
       const blocked = state.blocks.indexOf(m.id) >= 0;
       byId('pc-block-btn').textContent = blocked ? 'Unblock' : 'Block';
-      // Ban is offered to admins, or owners/mods of the currently-open room.
-      const r = currentRoom();
-      const canBan = state.admin || (r && (r.role === 'owner' || r.role === 'mod'));
+      // Ban is offered to global moderators/admins, or owners/mods of the currently-open room.
+      const canBan = canModerateCurrentConversation();
       byId('pc-ban-btn').hidden = !canBan || m.id === (state.me && state.me.id);
       byId('pc-message-btn').hidden = m.id === (state.me && state.me.id);
       openModal('profile-modal-back');
@@ -1350,17 +1446,19 @@
       try {
         const d = await api('/api/community?resource=bootstrap', 'GET');
         state.me = d.me; state.admin = !!d.admin; state.verified = !!d.verified;
+        state.caps = d.caps || {}; state.roleOptions = d.roleOptions || [];
         state.avatars = d.avatars || state.avatars || [];
         state.rooms = d.rooms || []; state.members = d.members || []; state.dms = d.dms || []; state.blocks = d.blocks || [];
         const chip = byId('me-chip');
         if (state.me) {
           chip.hidden = false;
-          chip.innerHTML = avatarHTML(state.me, 'sm') + '<span>' + esc(state.me.displayName || state.me.username) + (state.admin ? ' · staff' : '') + '</span>';
+          const capLabel = hasCap('canManageRoles') ? ' · admin' : (hasCap('canModerate') ? ' · mod' : (hasCap('canCreateChannels') ? ' · channels' : ''));
+          chip.innerHTML = avatarHTML(state.me, 'sm') + '<span>' + esc(state.me.displayName || state.me.username) + capLabel + '</span>';
         } else { chip.hidden = true; }
         byId('headline-login-btn').hidden = !!state.me;
         byId('edit-profile-btn').hidden = !state.me;
         // Only users with management permission can add channels.
-        byId('create-room-btn').hidden = !state.admin;
+        byId('create-room-btn').hidden = !hasCap('canCreateChannels');
         renderVerifyBanner();
         renderRooms(); renderMembers();
         if (!silent && state.sel) renderChatHead();

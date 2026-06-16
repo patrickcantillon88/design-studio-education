@@ -20,6 +20,11 @@ Truman Show.
   tears down on `leave`. Exposes `window.__tinyworldCCTVPlacement`.
 - `engine/world/58-lobby-presentation.js` — the big screen; its `tick()` cuts
   between slides and the hottest live feed.
+- `scripts/landing-feed.js` + `styles/landing.css` — the public landing-page
+  live-worlds panel. World rows are buttons: click once to expand an island
+  CCTV preview (2D canvas from `/api/worlds.preview.cells`), click again to
+  collapse. This is a lightweight marketing/front-door CCTV treatment, not a
+  Three.js render target.
 - Tick wiring: `engine/world/25-animation-loop-schema.js` calls
   `window.__tinyworldCCTV.tick(t,dt)` then `window.__tinyworldLobby.tick(t,dt)`
   **before** `renderScene()` so feeds captured this frame appear this frame.
@@ -76,6 +81,12 @@ showFeed, liveFeed`.
 - `?cctv=demo` (or `=1`) drops 4 monitors around origin watching a bobbing test
   subject and self-drives the tick — verifies the CRT look + tracking without a
   multiplayer room.
+- Landing page QA for `scripts/landing-feed.js`: if local `/api/worlds` is not
+  available, mock `window.fetch('/api/worlds')`, append a fresh copy of the
+  script, click `.hero-feed-link`, and assert `.hero-feed.is-expanded`, one
+  `.hero-feed-cctv-canvas`, and the `.hero-feed-cctv-meta` status/link render.
+  The panel should anchor below the nav (`.hero-feed.is-expanded`) and scroll
+  internally instead of overflowing the hero.
 - Headless sanity: eval module 62 under a THREE stub, `addCamera` + `tick` a few
   frames with a moving subject, assert `activeFeed()` returns the feed and
   `activity > 0`.

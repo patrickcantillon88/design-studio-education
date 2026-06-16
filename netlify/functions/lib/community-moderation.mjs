@@ -269,6 +269,36 @@ export async function deleteMessage(sql, { messageId }) {
   return { ok: true, action: 'deleteMessage', messageId: id, deleted: rows[0] };
 }
 
+export async function hideMessage(sql, { messageId, actorProfileId = null, reason = '' }) {
+  const id = Number(messageId);
+  if (!Number.isInteger(id) || id <= 0) return { ok: false, error: 'Invalid messageId' };
+  const rows = await sql`
+    UPDATE community_messages
+    SET hidden_at = COALESCE(hidden_at, NOW()),
+        hidden_by = ${actorProfileId},
+        hidden_reason = ${String(reason || '').slice(0, 200)}
+    WHERE id = ${id}
+    RETURNING id, author_profile_id, room_id, dm_key, hidden_at, hidden_by, hidden_reason
+  `;
+  if (!rows.length) return { ok: false, error: 'Message not found' };
+  return { ok: true, action: 'hideMessage', messageId: id, hidden: rows[0] };
+}
+
+export async function unhideMessage(sql, { messageId }) {
+  const id = Number(messageId);
+  if (!Number.isInteger(id) || id <= 0) return { ok: false, error: 'Invalid messageId' };
+  const rows = await sql`
+    UPDATE community_messages
+    SET hidden_at = NULL,
+        hidden_by = NULL,
+        hidden_reason = ''
+    WHERE id = ${id}
+    RETURNING id, author_profile_id, room_id, dm_key
+  `;
+  if (!rows.length) return { ok: false, error: 'Message not found' };
+  return { ok: true, action: 'unhideMessage', messageId: id, restored: rows[0] };
+}
+
 // Bulk-purge a member's recent messages (spam cleanup). `limit` caps how many.
 export async function purgeMemberMessages(sql, { target, roomId = null, limit = 50 }) {
   const profile = await resolveProfile(sql, target);

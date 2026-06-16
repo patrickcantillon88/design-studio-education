@@ -44,7 +44,7 @@ backend:
   Identity email login/signup and calls `/api/wallet` for Phantom login, storing
   the session under the shared `tinyworld:auth:wallet-session.v1` key.
 - Community moderation webhook: `community-webhook.mjs` (`/api/community/webhook`)
-  is a server-to-server endpoint for an agent (Hermes) to ban/unban/block/delete
+  is a server-to-server endpoint for an agent (Hermes) to ban/unban/block/hide or restore/delete
   messages/purge spam/delete rooms. Auth is a shared secret
   (`TINYWORLD_COMMUNITY_WEBHOOK_SECRET`) via `x-tinyworld-signature: sha256=<hmac
   of raw body>` (preferred) or `x-webhook-secret`. Shared primitives live in

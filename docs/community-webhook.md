@@ -1,7 +1,7 @@
 # Community Moderation Webhook
 
 Server-to-server endpoint so an external agent (e.g. **Hermes**) can moderate the
-TinyWorld community: ban / unban members, block, delete messages, purge spam, and
+TinyWorld community: ban / unban members, block, hide / restore messages, delete messages, purge spam, and
 delete rooms. It is authenticated by a **shared secret**, not a logged-in user.
 
 ## Configuration (Netlify env)
@@ -29,7 +29,8 @@ delete rooms. It is authenticated by a **shared secret**, not a logged-in user.
 **Batch (executed in order, max 50):**
 ```json
 { "actions": [
-  { "action": "deleteMessage", "messageId": 123 },
+  { "action": "hideMessage", "messageId": 123, "reason": "spam review" },
+  { "action": "deleteMessage", "messageId": 124 },
   { "action": "ban", "target": { "profileId": 42 }, "durationHours": 0 }
 ] }
 ```
@@ -45,6 +46,8 @@ delete rooms. It is authenticated by a **shared secret**, not a logged-in user.
 | `ban` | `target`, `durationHours` (0 = permanent), `reason?`, `roomId?` | block posting (global or per-room) until expiry |
 | `unban` | `target`, `roomId?` | lift matching ban |
 | `block` | `target` (the blocked), `blocker?` (defaults to super-owner) | hide blocked member from blocker; blocks DMs |
+| `hideMessage` | `messageId`, `reason?` | soft-hide one message from regular readers while preserving it for moderators |
+| `unhideMessage` / `restoreMessage` | `messageId` | restore a hidden message |
 | `deleteMessage` | `messageId` | hard-delete one message |
 | `purgeMessages` | `target`, `roomId?`, `limit?` (≤500, default 50) | bulk-delete a member's recent messages (spam cleanup) |
 | `deleteRoom` | `roomId` | delete a channel (cascades messages/bans/invites) |
@@ -66,8 +69,9 @@ same secret in `x-tinyworld-signature`) so the agent can observe and react:
 { "source": "tinyworld-community", "event": "message.created", "sentAt": "…", "data": { "message": { … }, "room": { "id", "slug", "name" }, "recentCount": 3 } }
 ```
 
-Currently emitted: `message.created` (room messages). Fire-and-forget — a slow or
-down agent never blocks the user posting.
+Currently emitted: `message.created` (room messages) plus moderation events
+`message.hidden`, `message.unhidden`, and `message.deleted`. Fire-and-forget — a slow or
+down agent never blocks the user posting or moderator action.
 
 ## Files
 - `netlify/functions/community-webhook.mjs` — the endpoint (`config.path = /api/community/webhook`).

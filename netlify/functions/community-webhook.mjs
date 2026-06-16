@@ -12,8 +12,8 @@
 // GET /api/community/webhook?resource=context  -> recent messages + members so
 //   the agent has material to reason over. (Also requires the webhook secret.)
 //
-// Supported actions: ban, unban, block, deleteMessage, purgeMessages,
-// deleteRoom, ping.
+// Supported actions: ban, unban, block, hideMessage, unhideMessage,
+// deleteMessage, purgeMessages, deleteRoom, ping.
 
 import { getSql, isDatabaseUnavailable, isMissingRelations } from './lib/db.mjs';
 import { corsResponse, errorResponse, jsonResponse } from './lib/http.mjs';
@@ -23,6 +23,8 @@ import {
   banMember,
   unbanMember,
   blockMember,
+  hideMessage,
+  unhideMessage,
   deleteMessage,
   purgeMemberMessages,
   deleteRoom,
@@ -120,6 +122,17 @@ async function dispatchAction(sql, action, body) {
       const blocker = body.blocker || { profileId: await moderatorProfileId(sql) };
       return blockMember(sql, { blocker, blocked: body.target || body.blocked });
     }
+
+    case 'hideMessage':
+      return hideMessage(sql, {
+        messageId: body.messageId,
+        actorProfileId: await moderatorProfileId(sql),
+        reason: body.reason || '',
+      });
+
+    case 'unhideMessage':
+    case 'restoreMessage':
+      return unhideMessage(sql, { messageId: body.messageId });
 
     case 'deleteMessage':
       return deleteMessage(sql, { messageId: body.messageId });

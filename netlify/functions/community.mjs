@@ -3,7 +3,7 @@ import { requireAuthUser } from './lib/auth.mjs';
 import { getSql, isDatabaseUnavailable, isMissingRelations } from './lib/db.mjs';
 import { corsResponse, errorResponse, jsonResponse, readJson, sameOriginWriteGuard } from './lib/http.mjs';
 import { ensureProfile, profileDto } from './lib/profiles.mjs';
-import { emitCommunityEvent, screenMessage, suspendMember, activeSuspension, ensureSuspensionTable, unsuspendMember, SUSPENSION_HOURS, POLICY_NOTICE } from './lib/community-moderation.mjs';
+import { emitCommunityEvent, screenMessage, suspendMember, activeSuspension, ensureSuspensionTable, unsuspendMember, deleteMessage, hideMessage, unhideMessage, SUSPENSION_HOURS, POLICY_NOTICE } from './lib/community-moderation.mjs';
 import { issueChallenge, verifySubmission, HONEYPOT_FIELD } from './lib/human-verification.mjs';
 
 export const config = { path: '/api/community' };
@@ -44,6 +44,9 @@ const COMMUNITY_RELATIONS = [
   'community_blocks',
   'community_invites',
   'community_verifications',
+  'community_roles',
+  'community_suspensions',
+  'community_reports',
 ];
 
 function isMissingCommunitySchema(err) {
@@ -252,6 +255,10 @@ function messageDto(row) {
     roomId: row.room_id || null,
     dmKey: row.dm_key || null,
     body: row.body,
+    hidden: !!row.hidden_at,
+    hiddenAt: row.hidden_at || null,
+    hiddenBy: row.hidden_by || null,
+    hiddenReason: row.hidden_reason || '',
     createdAt: row.created_at,
     author: {
       id: row.author_profile_id,
@@ -315,6 +322,12 @@ async function ensureTables(sql) {
   await sql`CREATE INDEX IF NOT EXISTS community_messages_room_idx ON community_messages (room_id, id)`;
   await sql`CREATE INDEX IF NOT EXISTS community_messages_dm_idx ON community_messages (dm_key, id)`;
   await sql`CREATE INDEX IF NOT EXISTS community_messages_author_time_idx ON community_messages (author_profile_id, created_at)`;
+  // Soft moderation: moderators can hide a message from regular readers while
+  // retaining it for audit/restore. Hard delete remains available separately.
+  await sql`ALTER TABLE community_messages ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE community_messages ADD COLUMN IF NOT EXISTS hidden_by INT REFERENCES profiles(id) ON DELETE SET NULL`;
+  await sql`ALTER TABLE community_messages ADD COLUMN IF NOT EXISTS hidden_reason TEXT NOT NULL DEFAULT ''`;
+  await sql`CREATE INDEX IF NOT EXISTS community_messages_hidden_idx ON community_messages (hidden_at)`;
   await sql`
     CREATE TABLE IF NOT EXISTS community_bans (
       id          SERIAL PRIMARY KEY,
@@ -567,13 +580,14 @@ async function listBlocks(sql, selfId) {
   return rows.map(r => Number(r.blocked_profile_id));
 }
 
-async function listRoomMessages(sql, roomId, selfId) {
+async function listRoomMessages(sql, roomId, selfId, includeHidden = false) {
   const rows = await sql`
-    SELECT msg.id, msg.room_id, msg.dm_key, msg.body, msg.created_at, msg.author_profile_id,
+    SELECT msg.id, msg.room_id, msg.dm_key, msg.body, msg.hidden_at, msg.hidden_by, msg.hidden_reason, msg.created_at, msg.author_profile_id,
            a.username AS author_username, a.display_name AS author_display_name, a.image AS author_image
     FROM community_messages msg
     JOIN profiles a ON a.id = msg.author_profile_id
     WHERE msg.room_id = ${roomId}
+      AND (${includeHidden} OR msg.hidden_at IS NULL)
       AND msg.author_profile_id NOT IN (
         SELECT blocked_profile_id FROM community_blocks WHERE blocker_profile_id = ${selfId}
       )
@@ -583,13 +597,14 @@ async function listRoomMessages(sql, roomId, selfId) {
   return rows.reverse().map(messageDto);
 }
 
-async function listDmMessages(sql, key, selfId) {
+async function listDmMessages(sql, key, selfId, includeHidden = false) {
   const rows = await sql`
-    SELECT msg.id, msg.room_id, msg.dm_key, msg.body, msg.created_at, msg.author_profile_id,
+    SELECT msg.id, msg.room_id, msg.dm_key, msg.body, msg.hidden_at, msg.hidden_by, msg.hidden_reason, msg.created_at, msg.author_profile_id,
            a.username AS author_username, a.display_name AS author_display_name, a.image AS author_image
     FROM community_messages msg
     JOIN profiles a ON a.id = msg.author_profile_id
     WHERE msg.dm_key = ${key}
+      AND (${includeHidden} OR msg.hidden_at IS NULL)
       AND msg.author_profile_id NOT IN (
         SELECT blocked_profile_id FROM community_blocks WHERE blocker_profile_id = ${selfId}
       )
@@ -613,6 +628,7 @@ async function listDmConversations(sql, selfId) {
     )
     LEFT JOIN player_presence op ON op.profile_id = o.id
     WHERE m.dm_key IS NOT NULL
+      AND m.hidden_at IS NULL
       AND (split_part(m.dm_key, '-', 1)::int = ${selfId} OR split_part(m.dm_key, '-', 2)::int = ${selfId})
     ORDER BY m.dm_key, m.id DESC
     LIMIT 50
@@ -642,6 +658,23 @@ async function roomRole(sql, roomId, profileId) {
     SELECT role FROM community_memberships WHERE room_id = ${roomId} AND profile_id = ${profileId} LIMIT 1
   `;
   return rows.length ? rows[0].role : null;
+}
+
+async function messageModerationTarget(sql, messageId, profileId, caps) {
+  const rows = await sql`
+    SELECT id, room_id, dm_key, author_profile_id, body, hidden_at
+    FROM community_messages
+    WHERE id = ${messageId}
+    LIMIT 1
+  `;
+  if (!rows.length) return { found: false, allowed: false, message: null };
+  const message = rows[0];
+  if (caps && caps.canModerate) return { found: true, allowed: true, message, role: 'moderator' };
+  if (message.room_id) {
+    const role = await roomRole(sql, message.room_id, profileId);
+    if (role === 'owner' || role === 'mod') return { found: true, allowed: true, message, role };
+  }
+  return { found: true, allowed: false, message, role: null };
 }
 
 async function rateLimitCount(sql, profileId) {
@@ -766,16 +799,20 @@ export default async function communityFunction(request) {
         if (roomId) {
           const roomRows = await sql`SELECT id, is_private FROM community_rooms WHERE id = ${roomId} LIMIT 1`;
           if (!roomRows.length) return errorResponse('Room not found', 404, origin);
+          let role = null;
           if (roomRows[0].is_private) {
-            const role = await roomRole(sql, roomId, profile.id);
+            role = await roomRole(sql, roomId, profile.id);
             if (!role && !admin) return errorResponse('This room is invite-only', 403, origin);
+          } else {
+            role = await roomRole(sql, roomId, profile.id);
           }
-          return jsonResponse({ messages: await listRoomMessages(sql, roomId, profile.id) }, origin);
+          const includeHidden = !!(caps.canModerate || role === 'owner' || role === 'mod');
+          return jsonResponse({ messages: await listRoomMessages(sql, roomId, profile.id, includeHidden) }, origin);
         }
         if (dmWith) {
           const key = dmKey(profile.id, dmWith);
           if (!key) return errorResponse('Invalid DM target', 400, origin);
-          return jsonResponse({ messages: await listDmMessages(sql, key, profile.id), dmKey: key }, origin);
+          return jsonResponse({ messages: await listDmMessages(sql, key, profile.id, !!caps.canModerate), dmKey: key }, origin);
         }
         return errorResponse('roomId or dm is required', 400, origin);
       }
@@ -823,6 +860,7 @@ export default async function communityFunction(request) {
     const GATED_ACTIONS = new Set([
       'postMessage', 'joinRoom', 'leaveRoom', 'createRoom', 'deleteRoom',
       'createInvite', 'redeemInvite', 'block', 'unblock', 'ban', 'unban',
+      'hideMessage', 'unhideMessage', 'deleteMessage',
       'reportMessage', 'downvoteMessage',
     ]);
     if (GATED_ACTIONS.has(action) && !verified) {
@@ -1188,6 +1226,50 @@ export default async function communityFunction(request) {
         WHERE profile_id = ${targetId} AND (room_id IS NOT DISTINCT FROM ${roomId || null})
       `;
       return jsonResponse({ ok: true }, origin);
+    }
+
+    if (action === 'hideMessage' || action === 'unhideMessage' || action === 'deleteMessage') {
+      const messageId = cleanProfileId(body && body.messageId);
+      if (!messageId) return errorResponse('messageId is required', 400, origin);
+      const target = await messageModerationTarget(sql, messageId, profile.id, caps);
+      if (!target.found) return errorResponse('Message not found', 404, origin);
+      if (!target.allowed) return errorResponse('Only moderators, admins, or room owners/mods can moderate messages here', 403, origin);
+
+      if (action === 'deleteMessage') {
+        const result = await deleteMessage(sql, { messageId });
+        if (!result.ok) return errorResponse(result.error || 'Could not delete message', 400, origin);
+        emitCommunityEvent('message.deleted', {
+          messageId,
+          roomId: target.message.room_id || null,
+          dm: !!target.message.dm_key,
+          actor: { id: profile.id, username: profile.username },
+        }).catch(() => {});
+        return jsonResponse({ ok: true, messageId }, origin);
+      }
+
+      if (action === 'hideMessage') {
+        const reason = cleanText(body && body.reason, 200);
+        const result = await hideMessage(sql, { messageId, actorProfileId: profile.id, reason });
+        if (!result.ok) return errorResponse(result.error || 'Could not hide message', 400, origin);
+        emitCommunityEvent('message.hidden', {
+          messageId,
+          roomId: target.message.room_id || null,
+          dm: !!target.message.dm_key,
+          reason,
+          actor: { id: profile.id, username: profile.username },
+        }).catch(() => {});
+        return jsonResponse({ ok: true, messageId, hidden: true }, origin);
+      }
+
+      const result = await unhideMessage(sql, { messageId });
+      if (!result.ok) return errorResponse(result.error || 'Could not restore message', 400, origin);
+      emitCommunityEvent('message.unhidden', {
+        messageId,
+        roomId: target.message.room_id || null,
+        dm: !!target.message.dm_key,
+        actor: { id: profile.id, username: profile.username },
+      }).catch(() => {});
+      return jsonResponse({ ok: true, messageId, hidden: false }, origin);
     }
 
     // ---- role management (admins only) ----
