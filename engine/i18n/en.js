@@ -209,6 +209,12 @@
     // ---- layers / tips ----
     'tips.show': 'Show controls',
     'tips.hide': 'Hide tips',
+    'tips.todoTitle': 'What to do',
+    'tips.controlsTitle': 'Controls',
+    'tips.step1': 'Pick a tool from the toolbar',
+    'tips.step2': 'Place terrain & objects on the grid',
+    'tips.step3': 'Click anything to edit it',
+    'tips.step4': 'Switch to Play to walk your world',
     'layers.toggle': 'Layers',
     'layers.open': 'Open layers panel',
     'layers.close': 'Close layers',
