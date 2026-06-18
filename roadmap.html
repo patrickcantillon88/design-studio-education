@@ -10,6 +10,25 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" />
 <link rel="stylesheet" href="styles/landing.css" />
+<script>
+  // Resolve once the Netlify Identity auth module has loaded (or time out), so the
+  // admin-by-account check can read window.TinyWorldAuth before booting.
+  (function roadmapAuthBootstrap() {
+    window.__tinyworldAuthReady = new Promise(function (resolve) {
+      window.__resolveTinyWorldAuthReady = resolve;
+      setTimeout(function () { resolve(false); }, 2500);
+    });
+  })();
+</script>
+<script id="tinyworld-auth-importmap" type="importmap">
+{
+  "imports": {
+    "@netlify/identity": "./vendor/netlify/identity.js",
+    "gotrue-js": "./vendor/netlify/gotrue.js"
+  }
+}
+</script>
+<script type="module" src="vendor/tinyworld-auth.js"></script>
 <script src="engine/world/00-custom-confirm.js"></script>
 <style>
 /* ---- kanban board ---- */
@@ -497,22 +516,52 @@
       return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    function adminHeaders() {
-      return { 'Content-Type': 'application/json', 'x-admin-secret': adminSecret };
+    // Bearer token for the signed-in account, if any. Mirrors scripts/admin-users.js:
+    // Identity JWT first, then wallet-session / nf_jwt cookie fallbacks. The server
+    // decides admin authority from the verified email this token resolves to.
+    function walletToken() {
+      try { return localStorage.getItem('tinyworld:auth:wallet-session.v1') || ''; } catch (_) { return ''; }
+    }
+    function cookieToken() {
+      try { const m = document.cookie.match(/(?:^|; )nf_jwt=([^;]*)/); return m ? decodeURIComponent(m[1]) : ''; } catch (_) { return ''; }
+    }
+    async function accessToken() {
+      try {
+        const A = window.TinyWorldAuth;
+        if (A && typeof A.getUser === 'function') {
+          const u = await A.getUser();
+          if (u && typeof u.jwt === 'function') {
+            const jwt = await Promise.resolve(u.jwt()).catch(() => '');
+            return jwt || (u.token && u.token.access_token) || walletToken() || cookieToken() || '';
+          }
+          return (u && u.token && u.token.access_token) || walletToken() || cookieToken() || '';
+        }
+      } catch (_) {}
+      return walletToken() || cookieToken() || '';
+    }
+
+    // Headers for authenticated reads/writes: the account bearer token (prod path)
+    // plus the localhost-only dev secret when present. Same-origin fetch sets Origin
+    // automatically, satisfying the server's CSRF guard.
+    async function authHeaders(withJson) {
+      const headers = withJson ? { 'Content-Type': 'application/json' } : {};
+      const token = await accessToken();
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      if (adminSecret) headers['x-admin-secret'] = adminSecret;
+      return headers;
     }
 
     // ---- API ----
     async function loadMilestones() {
-      const headers = adminSecret ? { 'x-admin-secret': adminSecret } : {};
-      const r = await fetch('/api/roadmap', { headers });
+      const r = await fetch('/api/roadmap', { headers: await authHeaders(false), credentials: 'same-origin' });
       const d = await r.json();
       milestones = d.milestones || [];
-      return !!d.admin; // server's verdict on the supplied secret
+      return !!d.admin; // server's verdict: verified admin email OR local dev secret
     }
 
     async function patchMilestone(id, updates) {
       const r = await fetch('/api/roadmap?id=' + id, {
-        method: 'PATCH', headers: adminHeaders(), body: JSON.stringify(updates),
+        method: 'PATCH', headers: await authHeaders(true), credentials: 'same-origin', body: JSON.stringify(updates),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Update failed');
@@ -522,7 +571,7 @@
 
     async function createMilestone(data) {
       const r = await fetch('/api/roadmap', {
-        method: 'POST', headers: adminHeaders(), body: JSON.stringify(data),
+        method: 'POST', headers: await authHeaders(true), credentials: 'same-origin', body: JSON.stringify(data),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Create failed');
@@ -531,7 +580,7 @@
 
     async function deleteMilestone(id) {
       const r = await fetch('/api/roadmap?id=' + id, {
-        method: 'DELETE', headers: adminHeaders(),
+        method: 'DELETE', headers: await authHeaders(false), credentials: 'same-origin',
       });
       if (!r.ok) { const d = await r.json(); throw new Error(d.error || 'Delete failed'); }
       milestones = milestones.filter(m => m.id !== id);
@@ -781,6 +830,9 @@
 
     // ---- Boot ----
     (async () => {
+      // Wait for the Identity auth module so accessToken() can read a live session
+      // on the first load (prod account-based admin), then ask the server.
+      try { await window.__tinyworldAuthReady; } catch (_) {}
       let serverSaysAdmin = false;
       try {
         serverSaysAdmin = await loadMilestones();
@@ -789,14 +841,16 @@
           '<p style="grid-column:1/-1;text-align:center;padding:64px;color:var(--muted)">Could not load roadmap.</p>';
         return;
       }
-      // A stored secret only grants admin if the server actually accepts it.
-      // Clears a stale/wrong secret so you never see the banner without real access.
+      // A stored local dev secret only grants admin if the server accepts it; clear
+      // a stale/wrong secret so the banner never shows without real access.
       if (adminSecret && !serverSaysAdmin) {
         adminSecret = '';
         try { sessionStorage.removeItem('twAdminSecret'); } catch (_) {}
         try { localStorage.removeItem('twAdminSecret'); } catch (_) {}
       }
-      adminMode = IS_LOCAL && serverSaysAdmin;
+      // Authority is the server's verdict — verified admin email (works on prod) OR
+      // the localhost-only dev secret. No client-side host gate.
+      adminMode = serverSaysAdmin;
       render();
     })();
   })();

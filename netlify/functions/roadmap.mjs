@@ -1,5 +1,7 @@
 import { getSql, isDatabaseUnavailable, isMissingRelation } from './lib/db.mjs';
-import { corsResponse, errorResponse, jsonResponse, readJson } from './lib/http.mjs';
+import { corsResponse, errorResponse, jsonResponse, readJson, sameOriginWriteGuard } from './lib/http.mjs';
+import { getAuthUser } from './lib/auth.mjs';
+import { isWorldAdminEmail } from './lib/worlds.mjs';
 
 export const config = { path: '/api/roadmap' };
 
@@ -38,10 +40,23 @@ function envValue(name) {
   return process.env[name] || '';
 }
 
-function isAdmin(request) {
-  // Admin actions are LOCAL-DEV ONLY. Never grant admin on a non-local host —
-  // this keeps the admin toolbar off production for every client, including
-  // cached browsers that still hold a stored secret.
+// Admin authority is decided SERVER-SIDE from a verified account session.
+// Prod path: the requester's Netlify Identity (or wallet) session resolves to an
+// email on the world-admin allowlist (isWorldAdminEmail). This branch has NO host
+// check, so it works on production. Authority is the verified email only — never a
+// client-supplied email or admin flag.
+async function isAdmin(request) {
+  try {
+    const user = await getAuthUser(request);
+    if (user && isWorldAdminEmail(user.email)) return true;
+  } catch (_) {}
+  return isLocalSecretAdmin(request);
+}
+
+// LOCALHOST-ONLY DEV FALLBACK: the legacy shared secret. Kept so local roadmap
+// editing keeps working without an Identity session, but it can NEVER grant admin
+// off localhost — the host check fails closed on every non-local request.
+function isLocalSecretAdmin(request) {
   try {
     const host = (request.headers.get('host') || '').toLowerCase();
     if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host)) return false;
@@ -117,7 +132,7 @@ export default async function roadmapFunction(request) {
       await ensureTable(sql);
       await seedTable(sql);
       const rows = await sql`SELECT * FROM roadmap_milestones ORDER BY sort_order ASC, id ASC LIMIT 500`;
-      return jsonResponse({ milestones: rows.map(milestoneDto), source: 'db', admin: isAdmin(request) }, origin);
+      return jsonResponse({ milestones: rows.map(milestoneDto), source: 'db', admin: await isAdmin(request) }, origin);
     } catch (err) {
       if (isDatabaseUnavailable(err) || isMissingRelation(err, 'roadmap_milestones')) {
         return jsonResponse({ milestones: FALLBACK_MILESTONES, source: 'fallback' }, origin);
@@ -128,7 +143,10 @@ export default async function roadmapFunction(request) {
   }
 
   // ---- writes require admin ----
-  if (!isAdmin(request)) return errorResponse('Forbidden', 403, origin);
+  if (!(await isAdmin(request))) return errorResponse('Forbidden', 403, origin);
+  // CSRF / same-origin guard: account sessions are cookie-ambient, so a verified
+  // admin's browser could be driven cross-site. Reject writes that aren't same-origin.
+  if (!sameOriginWriteGuard(request)) return errorResponse('Forbidden', 403, origin);
 
   // ---- POST — create ----
   if (request.method === 'POST') {

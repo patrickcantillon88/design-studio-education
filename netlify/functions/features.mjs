@@ -1,6 +1,7 @@
 import { getSql, isDatabaseUnavailable } from './lib/db.mjs';
-import { corsResponse, errorResponse, jsonResponse, readJson } from './lib/http.mjs';
-import { requireAuthUser } from './lib/auth.mjs';
+import { corsResponse, errorResponse, jsonResponse, readJson, sameOriginWriteGuard } from './lib/http.mjs';
+import { getAuthUser, requireAuthUser } from './lib/auth.mjs';
+import { isWorldAdminEmail } from './lib/worlds.mjs';
 
 export const config = { path: '/api/features' };
 
@@ -116,8 +117,21 @@ function envValue(name) {
   return process.env[name] || '';
 }
 
-function isAdmin(request) {
-  // Admin actions are LOCAL-DEV ONLY. Never grant admin on a non-local host.
+// Admin authority is decided SERVER-SIDE from a verified account session.
+// Prod path: the requester's Netlify Identity (or wallet) session resolves to an
+// email on the world-admin allowlist (isWorldAdminEmail). No host check, so it
+// works on production. Authority is the verified email only — never a client flag.
+async function isAdmin(request) {
+  try {
+    const user = await getAuthUser(request);
+    if (user && isWorldAdminEmail(user.email)) return true;
+  } catch (_) {}
+  return isLocalSecretAdmin(request);
+}
+
+// LOCALHOST-ONLY DEV FALLBACK: the legacy shared secret. Never grants admin off
+// localhost — the host check fails closed on every non-local request.
+function isLocalSecretAdmin(request) {
   try {
     const host = (request.headers.get('host') || '').toLowerCase();
     if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host)) return false;
@@ -145,7 +159,7 @@ export default async function featuresFunction(request) {
         ORDER BY vote_weight DESC, created_at DESC
         LIMIT 200
       `;
-      return jsonResponse({ suggestions: rows.map(suggestionDto), admin: isAdmin(request) }, origin);
+      return jsonResponse({ suggestions: rows.map(suggestionDto), admin: await isAdmin(request) }, origin);
     } catch (err) {
       if (isDatabaseUnavailable(err)) return jsonResponse({ suggestions: [], source: 'unavailable' }, origin);
       console.error('[features] GET error:', err);
@@ -155,7 +169,12 @@ export default async function featuresFunction(request) {
 
   // ---- POST — submit a suggestion (requires wallet auth or admin) ----
   if (request.method === 'POST') {
-    const isAdminReq = isAdmin(request);
+    const isAdminReq = await isAdmin(request);
+    // CSRF / same-origin guard, scoped to the admin-authenticated path only: admin
+    // sessions are cookie-ambient, so a cross-site POST riding the admin cookie must
+    // be rejected. The public wallet vote/suggest path is left untouched (Phase 3
+    // tightens that separately).
+    if (isAdminReq && !sameOriginWriteGuard(request)) return errorResponse('Forbidden', 403, origin);
     const url = new URL(request.url);
     const action = url.searchParams.get('action') || 'suggest';
 
@@ -222,7 +241,8 @@ export default async function featuresFunction(request) {
 
   // ---- PATCH — admin status update ----
   if (request.method === 'PATCH') {
-    if (!isAdmin(request)) return errorResponse('Forbidden', 403, origin);
+    if (!(await isAdmin(request))) return errorResponse('Forbidden', 403, origin);
+    if (!sameOriginWriteGuard(request)) return errorResponse('Forbidden', 403, origin);
     const url = new URL(request.url);
     const id = Number(url.searchParams.get('id'));
     if (!id) return errorResponse('id is required', 400, origin);
