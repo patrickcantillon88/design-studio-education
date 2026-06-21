@@ -131,9 +131,9 @@
           color: #cfe0ff;
         }
 
-        /* Play-chat heading (Pixelify Sans) */
+        /* Play-chat heading (Space Grotesk) */
         body.tw-worlds-play .mp-chat-head-title {
-          font-family: 'Pixelify Sans', monospace;
+          font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
           font-size: 13px;
           color: #cfe0ff;
           letter-spacing: .03em;

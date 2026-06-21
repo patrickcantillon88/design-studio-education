@@ -156,7 +156,7 @@
       const css = `
   .tw-worlds-launch{position:fixed;left:12px;bottom:calc(12px + var(--tw-worlds-bottom-inset,0px));z-index:60;display:flex;gap:6px;align-items:center;
     padding:9px 13px;border:0;cursor:pointer;border-radius:10px;
-    background:linear-gradient(180deg,#3a6fe0 0%,#2b59d6 100%);color:#fff;font:700 12px/1 'Pixelify Sans',ui-monospace,monospace;text-transform:uppercase;letter-spacing:.05em;
+    background:linear-gradient(180deg,#3a6fe0 0%,#2b59d6 100%);color:#fff;font:700 12px/1 'Space Grotesk',system-ui,-apple-system,sans-serif;text-transform:uppercase;letter-spacing:.05em;
     box-shadow:inset 0 1px 0 rgba(255,255,255,.28),0 4px 16px -4px rgba(43,89,214,.55),0 2px 6px -2px rgba(0,0,0,.3);transition:filter .08s,transform .04s}
   .tw-worlds-launch:hover{filter:brightness(1.12)}
   .tw-worlds-launch:active{transform:translateY(1px)}
@@ -165,7 +165,7 @@
       radial-gradient(circle at 50% 42%,rgba(42,211,95,.22),transparent 0 22%,rgba(11,88,125,.16) 42%,transparent 72%),
       radial-gradient(circle at 20% 76%,rgba(60,115,220,.16),transparent 0 30%),
       linear-gradient(180deg,#040816 0%,#07101f 54%,#03060d 100%);
-    overflow:hidden;color:#eef3ff;font-family:'Pixelify Sans',ui-monospace,monospace}
+    overflow:hidden;color:#eef3ff;font-family:'Space Grotesk',system-ui,-apple-system,sans-serif}
   .tw-worlds-overlay::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.72;
     background-image:
       radial-gradient(circle,#e9f0ff 0 1px,transparent 1.5px),
@@ -186,7 +186,7 @@
   .tw-worlds-head p{display:none}
   .tw-worlds-head-actions{position:absolute;right:24px;top:34px;display:flex;gap:8px;align-items:center}
   .tw-worlds-x{background:rgba(30,40,80,.55);border:1px solid rgba(100,130,220,.22);color:#dfe6ff;cursor:pointer;
-    font:700 12px 'Pixelify Sans',ui-monospace,monospace;text-transform:uppercase;letter-spacing:.04em;
+    font:700 12px 'Space Grotesk',system-ui,-apple-system,sans-serif;text-transform:uppercase;letter-spacing:.04em;
     border-radius:8px;padding:9px 13px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
     box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 2px 8px -2px rgba(0,0,0,.35);transition:filter .08s}
   .tw-worlds-x:hover{filter:brightness(1.18)}
@@ -218,7 +218,7 @@
   .tw-worlds-claim-banner{position:absolute;left:14px;right:14px;top:18px;z-index:3;display:flex;align-items:center;justify-content:center;
     min-height:34px;border-radius:7px;border:1px solid rgba(255,224,115,.7);
     background:linear-gradient(180deg,rgba(46,37,15,.96),rgba(124,78,11,.94));color:#fff1a8;
-    font:800 14px/1 'Pixelify Sans',ui-monospace,monospace;text-transform:uppercase;letter-spacing:.08em;
+    font:800 14px/1 'Space Grotesk',system-ui,-apple-system,sans-serif;text-transform:uppercase;letter-spacing:.08em;
     box-shadow:0 0 22px rgba(255,204,67,.22),inset 0 1px 0 rgba(255,255,255,.22);pointer-events:none;text-align:center}
   .tw-worlds-card:not([data-offset="0"]) .tw-worlds-claim-banner{font-size:11px;min-height:26px;top:12px}
   .tw-worlds-card h3{margin:0;font-size:23px;text-transform:uppercase;letter-spacing:.04em;display:flex;justify-content:center;align-items:center;gap:10px;text-align:center}
@@ -238,7 +238,7 @@
   .tw-worlds-ready{color:#9fb4cf;font-size:12px}
   .tw-worlds-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
   .tw-btn{flex:1;min-width:80px;border:0;border-radius:10px;padding:9px;cursor:pointer;color:#fff;
-    font:700 11px/1 'Pixelify Sans',ui-monospace,monospace;text-transform:uppercase;letter-spacing:.05em;
+    font:700 11px/1 'Space Grotesk',system-ui,-apple-system,sans-serif;text-transform:uppercase;letter-spacing:.05em;
     background:linear-gradient(180deg,#3a6fe0 0%,#2b59d6 100%);
     box-shadow:inset 0 1px 0 rgba(255,255,255,.24),0 4px 12px -4px rgba(43,89,214,.4),0 2px 4px -2px rgba(0,0,0,.25);
     transition:filter .08s,transform .04s}
@@ -264,7 +264,7 @@
   .tw-worlds-search::placeholder{color:#8290a8}
   .tw-worlds-search:focus{border-color:rgba(70,224,88,.62);box-shadow:0 0 0 3px rgba(70,224,88,.16)}
   .tw-worlds-filter{height:46px;border-radius:8px;border:1px solid rgba(106,133,184,.32);padding:0 15px;display:flex;gap:9px;align-items:center;
-    background:rgba(13,23,43,.82);color:#bfcbe0;font:700 12px 'Pixelify Sans',ui-monospace,monospace;text-transform:uppercase;letter-spacing:.06em;cursor:pointer}
+    background:rgba(13,23,43,.82);color:#bfcbe0;font:700 12px 'Space Grotesk',system-ui,-apple-system,sans-serif;text-transform:uppercase;letter-spacing:.06em;cursor:pointer}
   .tw-worlds-filter.active{color:#95f0a5;border-color:rgba(70,224,88,.5);box-shadow:0 0 18px rgba(70,224,88,.16)}
   .tw-worlds-empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:#b8c3d8;font:700 14px 'Space Grotesk',system-ui,sans-serif}
   @media (max-width:860px){
@@ -288,7 +288,7 @@
   .tw-modal-back{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;
     background:rgba(3,5,16,.65);backdrop-filter:blur(10px) saturate(130%);-webkit-backdrop-filter:blur(10px) saturate(130%)}
   .tw-modal{background:rgba(8,11,28,.88);border:1px solid rgba(80,110,200,.26);border-radius:14px;padding:20px;width:min(420px,92vw);color:#eef3ff;
-    font-family:'Pixelify Sans',ui-monospace,monospace;
+    font-family:'Space Grotesk',system-ui,-apple-system,sans-serif;
     backdrop-filter:blur(22px) saturate(160%);-webkit-backdrop-filter:blur(22px) saturate(160%);
     box-shadow:inset 0 1px 0 rgba(120,150,230,.18),0 32px 64px -20px rgba(0,0,20,.7),0 8px 16px -8px rgba(0,0,0,.4)}
   .tw-modal h3{margin:0 0 12px;text-transform:uppercase;letter-spacing:.06em}
@@ -301,7 +301,7 @@
     background:rgba(8,11,28,.82);border:1px solid rgba(80,110,200,.22);border-radius:12px;padding:9px;align-items:center;
     backdrop-filter:blur(18px) saturate(150%);-webkit-backdrop-filter:blur(18px) saturate(150%);
     box-shadow:inset 0 1px 0 rgba(120,150,230,.14),0 16px 40px -12px rgba(0,0,20,.5)}
-  .tw-draftbar span{font:700 11px 'Pixelify Sans',ui-monospace,monospace;color:#ffd690;text-transform:uppercase;letter-spacing:.04em;padding:0 6px}
+  .tw-draftbar span{font:700 11px 'Space Grotesk',system-ui,-apple-system,sans-serif;color:#ffd690;text-transform:uppercase;letter-spacing:.04em;padding:0 6px}
   body.tw-worlds-embed .toolbar{bottom:calc(28px + var(--tw-worlds-bottom-inset,0px)) !important}
   body.tw-worlds-embed .tool-palette{bottom:calc(28px + var(--tw-worlds-bottom-inset,0px)) !important}
   body.tw-worlds-embed .mp-chat-toggle{bottom:calc(24px + var(--tw-worlds-bottom-inset,0px)) !important}

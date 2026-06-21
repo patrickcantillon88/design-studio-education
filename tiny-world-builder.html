@@ -408,7 +408,7 @@
     <button class="btn build-play-toggle" id="build-play-mode" type="button" data-pos-type="primary" data-tooltip="Switch to play mode" aria-label="Switch to play mode" aria-pressed="false">
       <svg class="ic-build" viewBox="0 0 24 24" aria-hidden="true"><path d="m14.7 6.3 3 3"/><path d="m5 21 4.8-1 9.4-9.4a2.1 2.1 0 0 0-3-3L6.2 17.2 5 21Z"/><path d="m3 7 4-4 3 3-4 4Z"/></svg>
       <svg class="ic-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5v14l12-7Z"/></svg>
-      <span id="build-play-mode-label">Build</span>
+      <span id="build-play-mode-label">Design</span>
     </button>
     <button class="btn icon" id="stamp-builder" data-pos-type="primary" data-tooltip="Stamps" data-i18n-tooltip="controls.stamps" aria-label="Open stamps">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 3 7l9 5 9-5-9-5Z"/><path d="m3 7 9 5v10l-9-5V7Z"/><path d="m21 7-9 5v10l9-5V7Z"/></svg>
@@ -783,18 +783,15 @@
 
   <div id="welcome-modal" class="modal launch-modal" hidden aria-hidden="true">
     <form class="modal-card welcome-card launch-card" role="dialog" aria-modal="true" aria-labelledby="welcome-title" onsubmit="return false">
-      <h1 class="sr-only" id="welcome-title">Tiny World Builder</h1>
-      <img class="welcome-logo" src="assets/twlogo.png" alt="Tiny World Builder" width="1254" height="1254">
+      <h1 class="sr-only" id="welcome-title">Design Studio</h1>
       <div class="welcome-actions" aria-label="Choose mode">
         <button class="welcome-mode-btn welcome-tinyverse" id="welcome-tinyverse" type="button" data-pos-type="primary" hidden aria-hidden="true">Explore</button>
-        <button class="welcome-mode-btn welcome-battleworlds is-soon" id="welcome-battleworlds" type="button" data-pos-type="shield" hidden aria-hidden="true" disabled aria-disabled="true">Game mode</button>
+        <button class="welcome-mode-btn welcome-battleworlds is-soon" id="welcome-battleworlds" type="button" data-pos-type="shield" hidden aria-hidden="true" disabled aria-disabled="true">Review</button>
         <button class="welcome-mode-btn welcome-build" id="welcome-build" type="button" data-pos-type="tertiary">Design</button>
-        <button class="welcome-mode-btn welcome-play" id="welcome-play" type="button" data-pos-type="terrain">Play</button>
+        <button class="welcome-mode-btn welcome-play" id="welcome-play" type="button" data-pos-type="terrain">Review</button>
       </div>
       <p class="welcome-credit">
-        <span>Created by Jason Kneen</span>
-        <a href="https://x.com/jasonkneen" target="_blank" rel="noopener noreferrer" aria-label="Jason Kneen on Twitter">@jasonkneen</a>
-        <a href="https://x.com/tinyworldsapp" target="_blank" rel="noopener noreferrer" aria-label="Tiny Worlds App on Twitter">@tinyworldsapp</a>
+        <span>Source adapted from Tiny World Builder under AGPL-3.0.</span>
       </p>
     </form>
   </div>
@@ -1613,7 +1610,6 @@
   <script defer src="engine/i18n/zh.js"></script>
   <script defer src="engine/i18n/th.js"></script>
   <script defer src="engine/i18n/i18n-core.js"></script>
-  <script defer src="scripts/countdown.js"></script>
   <script defer src="engine/world/00-prelude.js"></script>
   <script defer src="engine/world/01-render-core.js"></script>
   <script defer src="engine/world/02-cameras-lighting.js"></script>

@@ -1128,7 +1128,7 @@ function tryEnterGate() {
         skyHudEl = document.createElement('div');
         skyHudEl.id = 'tw-skyfall-hud';
         skyHudEl.style.cssText = 'position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:96;' +
-          "font:700 13px 'Pixelify Sans',ui-monospace,Menlo,monospace;letter-spacing:.06em;color:#eaf4ff;" +
+          "font:700 13px 'Space Grotesk',system-ui,-apple-system,sans-serif;letter-spacing:.06em;color:#eaf4ff;" +
           'background:rgba(8,14,26,.72);padding:8px 14px;border-radius:8px;box-shadow:inset 0 0 0 2px #2b59d6;text-transform:uppercase';
         document.body.appendChild(skyHudEl);
       }
@@ -1416,7 +1416,7 @@ function tryEnterGate() {
         _srHudEl = document.createElement('div');
         _srHudEl.id = 'tw-surface-roam-hud';
         _srHudEl.style.cssText = 'position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:96;' +
-          "font:700 12px 'Pixelify Sans',ui-monospace,Menlo,monospace;letter-spacing:.06em;color:#c8f0c8;" +
+          "font:700 12px 'Space Grotesk',system-ui,-apple-system,sans-serif;letter-spacing:.06em;color:#c8f0c8;" +
           'background:rgba(8,22,8,.78);padding:8px 16px;border-radius:8px;box-shadow:inset 0 0 0 2px #2b7a2b;text-transform:uppercase';
         document.body.appendChild(_srHudEl);
       }

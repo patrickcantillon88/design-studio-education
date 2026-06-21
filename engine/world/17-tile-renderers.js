@@ -259,11 +259,11 @@
             const cv = document.createElement('canvas');
             const pad = 24, fontPx = 64;
             const cx = cv.getContext('2d');
-            cx.font = '700 ' + fontPx + "px 'Pixelify Sans', ui-monospace, monospace";
+            cx.font = '700 ' + fontPx + "px 'Space Grotesk', system-ui, -apple-system, sans-serif";
             const tw = Math.ceil(cx.measureText(labelText).width);
             cv.width = tw + pad * 2; cv.height = fontPx + pad * 2;
             const g = cv.getContext('2d');
-            g.font = '700 ' + fontPx + "px 'Pixelify Sans', ui-monospace, monospace";
+            g.font = '700 ' + fontPx + "px 'Space Grotesk', system-ui, -apple-system, sans-serif";
             g.textAlign = 'center'; g.textBaseline = 'middle';
             // pill background
             g.fillStyle = 'rgba(8,12,28,0.82)';

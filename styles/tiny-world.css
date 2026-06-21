@@ -1,29 +1,5 @@
-  /* 8-bit pixel font for in-world dialog / speech bubbles (SIL OFL 1.1 —
-     see vendor/fonts/OFL.txt). Path is relative to this stylesheet's location. */
-  @font-face {
-    font-family: 'Press Start 2P';
-    font-style: normal;
-    font-weight: 400;
-    font-display: swap;
-    src: url('../vendor/fonts/press-start-2p.woff2') format('woff2');
-  }
-  .tw-pixel-font { font-family: 'Press Start 2P', 'Courier New', monospace; }
-
-  /* Self-hosted pixel display fonts (OFL) for the retro game UI. latin subset. */
-  @font-face {
-    font-family: 'Pixelify Sans';
-    font-style: normal;
-    font-weight: 400 700;
-    font-display: swap;
-    src: url('fonts/PixelifySans-latin.woff2') format('woff2');
-  }
-  @font-face {
-    font-family: 'Bitcount Single';
-    font-style: normal;
-    font-weight: 400;
-    font-display: swap;
-    src: url('fonts/BitcountSingle-latin.woff') format('woff');
-  }
+  /* Education fork: keep UI typography readable. Avoid pixel/display fonts. */
+  .tw-pixel-font { font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif; }
 
   :root {
     --bg: #f4ede0;
@@ -38,7 +14,7 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
   html[lang="th"] body { font-family: 'Noto Sans Thai', 'Space Grotesk', system-ui, -apple-system, sans-serif; }
-  html[lang="th"] .tw-pixel-font { font-family: 'Noto Sans Thai', 'Press Start 2P', 'Courier New', monospace; }
+  html[lang="th"] .tw-pixel-font { font-family: 'Noto Sans Thai', 'Space Grotesk', system-ui, sans-serif; }
   html[lang="th"] .toolbar-label,
   html[lang="th"] .mode-title,
   html[lang="th"] .settings-tab,
@@ -2368,7 +2344,7 @@
     align-items: center;
     justify-content: center;
     gap: 1px;
-    font-family: 'Pixelify Sans', ui-monospace, 'SF Mono', Menlo, monospace;
+    font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
     font-size: 11px;
     letter-spacing: 0.02em;
     color: #8d887d;
@@ -2379,7 +2355,7 @@
   }
   /* Pixel font across the toolbar chrome (group buttons, shortcut keys, brand title). */
   .tool-group-btn, .tool kbd, .tool-group-btn > span, .toolbar .brand-title-btn {
-    font-family: 'Pixelify Sans', ui-monospace, 'SF Mono', Menlo, monospace !important;
+    font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif !important;
   }
   .tool:hover {
     background: rgba(255, 255, 255, 0.55);
@@ -9288,7 +9264,7 @@ body.surface-roam-fp { cursor: none; }
   top: 14px;
   transform: translateX(-50%);
   z-index: 96;
-  font: 700 12px 'Pixelify Sans', ui-monospace, Menlo, monospace;
+  font: 700 12px 'Space Grotesk', ui-monospace, Menlo, monospace;
   letter-spacing: .06em;
   color: #c8f0c8;
   background: rgba(8, 22, 8, .78);

@@ -1,11 +1,3 @@
-@font-face {
-  font-family: 'Pixelify Sans';
-  font-style: normal;
-  font-weight: 400 700;
-  font-display: swap;
-  src: url('fonts/PixelifySans-latin.woff2') format('woff2');
-}
-
 :root {
   --bg: #f4ede0;
   --panel: #ffffff;
@@ -19,7 +11,7 @@
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 20px;
-  --display-font: 'Pixelify Sans', ui-monospace, 'SF Mono', Menlo, monospace;
+  --display-font: 'Space Grotesk', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --body-font: 'Space Grotesk', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 

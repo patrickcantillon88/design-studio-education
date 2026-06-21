@@ -45,7 +45,7 @@ Toolbar tool buttons are the one sanctioned outlier (16px, between lg and xl).
 
 - Body/UI: `'Inter', system-ui, -apple-system, sans-serif`, 13px is the
   standard panel/control size; labels often `font-weight: 500`.
-- Pixel accents: `'Pixelify Sans'` (toolbar tool labels, 11px) and
+- Readable typography: `'Space Grotesk'` (toolbar tool labels, 11px) and
   `'Press Start 2P'` via `.tw-pixel-font` (deliberate retro headings only).
   Both are self-hosted `@font-face` at the top of the stylesheet.
 - Never mix pixel fonts into body copy or form controls.
@@ -84,7 +84,7 @@ Notes:
 - Toggle switches (checkboxes): 38x22 track, 16px thumb as `::before`,
   checked track = accent blue at `.85`. The thumb animates with
   `transform: translateX(16px)` — never `left` (layout property).
-- Toolbar tools (`.tool`): 52x50, radius 16px, Pixelify Sans 11px labels,
+- Toolbar tools (`.tool`): 52x50, radius 16px, Space Grotesk 11px labels,
   muted `#8d887d` at rest, accent treatment when active.
 
 ## Motion

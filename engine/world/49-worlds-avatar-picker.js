@@ -453,7 +453,7 @@
   .tw-avp-backdrop{position:fixed;inset:0;z-index:95;display:none;align-items:center;justify-content:center;background:rgba(5,7,14,.62)}
   .tw-avp-backdrop.open{display:flex}
   .tw-avp{width:min(760px,94vw);max-height:86vh;overflow:auto;background:#161a2b;color:#eef3ff;
-    font:700 13px 'Pixelify Sans',ui-monospace,'SF Mono',Menlo,monospace;letter-spacing:.04em;padding:18px 18px 20px;border-radius:4px;
+    font:700 13px 'Space Grotesk',system-ui,-apple-system,sans-serif;letter-spacing:.04em;padding:18px 18px 20px;border-radius:4px;
     box-shadow:0 0 0 2px #05070e, inset 2px 2px 0 #38415f, inset -2px -2px 0 #0a0d18}
   .tw-avp-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
   .tw-avp-title{font-size:15px;text-transform:uppercase;letter-spacing:.08em;text-shadow:1px 1px 0 #05070e}
@@ -463,7 +463,7 @@
   .tw-avp-close:active{transform:translateY(2px)}
   .tw-avp-tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
   .tw-avp-tab{border:0;cursor:pointer;color:#cfd8f5;background:#222a42;padding:7px 12px;border-radius:10px;
-    font:700 11px 'Pixelify Sans',ui-monospace,'SF Mono',Menlo,monospace;text-transform:uppercase;letter-spacing:.06em;
+    font:700 11px 'Space Grotesk',system-ui,-apple-system,sans-serif;text-transform:uppercase;letter-spacing:.06em;
     box-shadow:inset 2px 2px 0 rgba(255,255,255,.12), inset -2px -2px 0 rgba(0,0,0,.45);transition:filter .08s}
   .tw-avp-tab:hover{filter:brightness(1.15)}
   .tw-avp-tab.active{color:#fff;background:#2b59d6;box-shadow:inset 2px 2px 0 rgba(255,255,255,.30), inset -2px -2px 0 rgba(0,0,0,.40)}
@@ -476,7 +476,7 @@
     box-shadow:inset 1px 1px 0 #2b3350, inset -1px -1px 0 #05070e}
   .tw-avp-name{margin-top:8px;text-align:center;text-transform:uppercase;letter-spacing:.05em;font-size:11px}
   .tw-avp-pick{margin-top:8px;width:100%;border:0;cursor:pointer;color:#fff;background:#54bd37;padding:6px;border-radius:10px;
-    font:700 10px 'Pixelify Sans',ui-monospace,'SF Mono',Menlo,monospace;text-transform:uppercase;letter-spacing:.06em;
+    font:700 10px 'Space Grotesk',system-ui,-apple-system,sans-serif;text-transform:uppercase;letter-spacing:.06em;
     box-shadow:inset 2px 2px 0 rgba(255,255,255,.30), inset -2px -2px 0 rgba(0,0,0,.40), 0 2px 0 0 rgba(0,0,0,.4);transition:filter .08s,transform .04s}
   .tw-avp-pick:hover{filter:brightness(1.12)}
   .tw-avp-pick:active{transform:translateY(1px)}

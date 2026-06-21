@@ -373,14 +373,9 @@ syncTinyworldOwnerToolControls();
       } catch (_) {}
       return false;
     })();
-    if (skipWelcomeForMultiplayer) {
-      const tinyverseSlug = typeof window.__tinyworldTinyverseSlugParam === 'function'
-        ? window.__tinyworldTinyverseSlugParam()
-        : null;
-      chooseWelcomeMode(tinyverseSlug ? 'play' : 'build');
-      return;
-    }
-    showWelcome({ skipRoomCleanup: true });
+    // Education fork: skip the mode-choice launch card and open directly into
+    // the design studio. Review/play mode remains available from the toolbar.
+    chooseWelcomeMode('build');
   }
   // -------- cloud worlds / assets --------
   const TW_CLOUD_SLOT_PREFIX = 'cloud:';
