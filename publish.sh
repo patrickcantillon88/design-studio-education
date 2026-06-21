@@ -12,11 +12,11 @@ for arg in "$@"; do
       cat <<'HELP'
 Usage: ./publish.sh [--zip]
 
-Creates a clean dist/ folder for publishing Tiny World Builder.
+Creates a clean dist/ folder for publishing Design Studio Education.
 
 Outputs:
   dist/index.html                 Landing page entry point
-  dist/tiny-world-builder.html    Original app filename
+  dist/tiny-world-builder.html    Studio app filename
   dist/world.schema.json
   dist/README.md
   dist/LICENSE
@@ -57,18 +57,9 @@ mkdir -p "$DIST/assets"
 
 cp index.html "$DIST/index.html"
 cp tiny-world-builder.html "$DIST/tiny-world-builder.html"
-cp roadmap.html "$DIST/roadmap.html"
-cp news.html "$DIST/news.html"
-cp docs.html "$DIST/docs.html"
-cp doc.html "$DIST/doc.html"
-cp features.html "$DIST/features.html"
-cp community.html "$DIST/community.html"
-cp admin-users.html "$DIST/admin-users.html"
 cp terms.html "$DIST/terms.html"
 cp privacy.html "$DIST/privacy.html"
 cp code-of-conduct.html "$DIST/code-of-conduct.html"
-cp worlds.html "$DIST/worlds.html"
-cp harvest.html "$DIST/harvest.html"
 cp LandscapeEngine.js "$DIST/LandscapeEngine.js"
 cp world.schema.json "$DIST/world.schema.json"
 
