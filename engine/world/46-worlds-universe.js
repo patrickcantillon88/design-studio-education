@@ -14,6 +14,7 @@
   
     const WS = (window.__tinyworldWorlds = window.__tinyworldWorlds || {});
     const TINYVERSE_HUB_SLUG = 'tinyverse-nexus';
+    const WORLD_SELECTION_GATE_DEST = '__world-picker';
     const ACTIVE_TINYVERSE_LS = 'tinyworld:worlds.activeTinyverse.v1';
   
     function api(path, method, body) {
@@ -35,9 +36,19 @@
         return validWorldSlug(data && data.slug);
       } catch (_) { return ''; }
     }
+    function worldSelectionGateCell(gridSize) {
+      const center = Math.floor(Math.max(1, gridSize) / 2);
+      return { x: center, z: center, terrain: 'grass', kind: 'stargate', dest: WORLD_SELECTION_GATE_DEST };
+    }
+    function isWorldSelectionGateCenterCell(cell, x, z) {
+      const cx = Math.round(Number(Array.isArray(cell) ? cell[0] : cell.x));
+      const cz = Math.round(Number(Array.isArray(cell) ? cell[1] : cell.z));
+      return cx === x && cz === z;
+    }
     function normalizeWorldSelectionGateData(data, gridSizeHint) {
       const src = data && typeof data === 'object' ? data : { v: 4, cells: [] };
       const gridSize = Math.max(1, Math.round(Number(src.gridSize || gridSizeHint) || 8));
+      const gate = worldSelectionGateCell(gridSize);
       const sourceCells = Array.isArray(src.cells) ? src.cells : [];
       const nextCells = [];
       sourceCells.forEach(cell => {
@@ -47,14 +58,16 @@
         const kind = Array.isArray(cell) ? cell[3] : cell.kind;
         if (!Number.isFinite(x) || !Number.isFinite(z)) return;
         if (kind === 'stargate') {
-          // World selection is UI chrome now; strip legacy physical gates.
+          // Strip legacy multi-gates; the normalizer adds one center exit gate.
           const terrain = (Array.isArray(cell) ? cell[2] : cell.terrain) || 'grass';
           if (terrain && terrain !== 'grass') nextCells.push(Array.isArray(cell) ? [x, z, terrain] : { x, z, terrain });
           return;
         }
         nextCells.push(cell);
       });
-      return Object.assign({}, src, { v: src.v || 4, gridSize, cells: nextCells });
+      const cells = nextCells.filter(cell => !isWorldSelectionGateCenterCell(cell, gate.x, gate.z));
+      cells.push(gate);
+      return Object.assign({}, src, { v: src.v || 4, gridSize, cells });
     }
     function normalizeWorldForEntry(world) {
       if (!world || typeof world !== 'object') return world;
@@ -81,6 +94,10 @@
       help: { p: ['M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z', 'M9.5 9.2A2.5 2.5 0 0 1 14 10.5c0 1.6-2 2-2 3.5', 'M12 17h.01'] },
       person: { p: ['M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M5 21a7 7 0 0 1 14 0'] },
       reply: { p: ['M10 17l-5-5 5-5', 'M5 12h9a6 6 0 0 1 6 6v1'] },
+      chevronLeft: { p: ['M15 18l-6-6 6-6'] },
+      chevronRight: { p: ['M9 18l6-6-6-6'] },
+      search: { p: ['M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15z', 'M16 16l5 5'] },
+      filters: { p: ['M4 7h16', 'M7 12h10', 'M10 17h4'] },
     };
     function makeIcon(name, size) {
       const NS = 'http://www.w3.org/2000/svg';
@@ -133,37 +150,71 @@
   .tw-worlds-launch:hover{filter:brightness(1.12)}
   .tw-worlds-launch:active{transform:translateY(1px)}
   .tw-worlds-overlay{position:fixed;inset:0;z-index:80;display:none;
-    background:rgba(4,6,18,.82);backdrop-filter:blur(6px) saturate(140%);-webkit-backdrop-filter:blur(6px) saturate(140%);
-    overflow:auto;color:#eef3ff;font-family:'Pixelify Sans',ui-monospace,monospace}
+    background:
+      radial-gradient(circle at 50% 42%,rgba(42,211,95,.22),transparent 0 22%,rgba(11,88,125,.16) 42%,transparent 72%),
+      radial-gradient(circle at 20% 76%,rgba(60,115,220,.16),transparent 0 30%),
+      linear-gradient(180deg,#040816 0%,#07101f 54%,#03060d 100%);
+    overflow:hidden;color:#eef3ff;font-family:'Pixelify Sans',ui-monospace,monospace}
+  .tw-worlds-overlay::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.72;
+    background-image:
+      radial-gradient(circle,#e9f0ff 0 1px,transparent 1.5px),
+      linear-gradient(rgba(88,122,172,.12) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(88,122,172,.12) 1px,transparent 1px);
+    background-size:131px 89px,64px 64px,64px 64px;
+    background-position:17px 23px,50% 32%,50% 32%;
+    mask-image:radial-gradient(circle at 50% 44%,rgba(0,0,0,.85),transparent 74%)}
+  .tw-worlds-overlay::after{content:"";position:absolute;left:50%;top:62%;width:1600px;height:520px;transform:translate(-50%,-50%);pointer-events:none;
+    border:1px solid rgba(92,150,231,.16);border-radius:50%;box-shadow:0 0 0 18px rgba(92,150,231,.025),0 0 0 42px rgba(25,210,89,.035),0 0 100px rgba(54,176,255,.1)}
   .tw-worlds-overlay.open{display:block}
-  .tw-worlds-wrap{max-width:1320px;margin:0 auto;padding:24px 20px 60px}
-  .tw-worlds-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:20px}
-  .tw-worlds-head h2{margin:0;font-size:30px;text-transform:uppercase;letter-spacing:.06em;text-shadow:0 2px 12px rgba(0,0,0,.6)}
-  .tw-worlds-head p{margin:6px 0 0;opacity:.72;font-size:13px;font-family:'Space Grotesk',system-ui,sans-serif}
+  .tw-worlds-wrap{position:relative;z-index:1;min-height:100%;box-sizing:border-box;max-width:1480px;margin:0 auto;padding:48px 24px 34px;display:flex;flex-direction:column;align-items:center}
+  .tw-worlds-head{width:100%;display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:8px}
+  .tw-worlds-title{position:relative;margin:0;font-size:25px;text-transform:uppercase;letter-spacing:.12em;color:#cbd5e4;text-shadow:0 2px 18px rgba(0,0,0,.8)}
+  .tw-worlds-title::before,.tw-worlds-title::after{content:"";position:absolute;top:50%;width:30px;height:2px;background:#28d84e;box-shadow:0 0 12px rgba(40,216,78,.8)}
+  .tw-worlds-title::before{right:calc(100% + 22px)}
+  .tw-worlds-title::after{left:calc(100% + 22px)}
+  .tw-worlds-head p{display:none}
+  .tw-worlds-head-actions{position:absolute;right:24px;top:34px;display:flex;gap:8px;align-items:center}
   .tw-worlds-x{background:rgba(30,40,80,.55);border:1px solid rgba(100,130,220,.22);color:#dfe6ff;cursor:pointer;
     font:700 12px 'Pixelify Sans',ui-monospace,monospace;text-transform:uppercase;letter-spacing:.04em;
-    border-radius:10px;padding:9px 13px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    border-radius:8px;padding:9px 13px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
     box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 2px 8px -2px rgba(0,0,0,.35);transition:filter .08s}
   .tw-worlds-x:hover{filter:brightness(1.18)}
   .tw-worlds-x:active{transform:translateY(1px)}
-  .tw-worlds-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
-  .tw-worlds-card{background:rgba(12,16,38,.72);border:1px solid rgba(80,110,200,.22);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;
+  .tw-worlds-stage{position:relative;width:100%;height:min(58vh,560px);min-height:470px;margin:4px auto 0;overflow:visible}
+  .tw-worlds-grid{position:absolute;inset:0;perspective:1000px}
+  .tw-worlds-card{position:absolute;left:50%;top:50%;width:min(520px,calc(100vw - 72px));min-height:388px;box-sizing:border-box;
+    background:linear-gradient(180deg,rgba(13,24,48,.88),rgba(5,10,22,.9));border:1px solid rgba(114,150,225,.34);border-radius:8px;padding:14px 14px 18px;display:flex;flex-direction:column;gap:10px;
     backdrop-filter:blur(18px) saturate(150%);-webkit-backdrop-filter:blur(18px) saturate(150%);
-    box-shadow:inset 0 1px 0 rgba(120,150,230,.14),0 20px 40px -16px rgba(0,0,20,.55),0 4px 8px -4px rgba(0,0,0,.28);transition:transform .06s,box-shadow .12s}
-  .tw-worlds-card:hover{transform:translateY(-2px);box-shadow:inset 0 1px 0 rgba(120,150,230,.22),0 24px 48px -14px rgba(0,0,25,.65),0 6px 12px -4px rgba(0,0,0,.32)}
-  /* Locked worlds — greyed out and non-interactive (only the demo world is playable for now). */
-  .tw-worlds-card.tw-worlds-locked{opacity:.42;filter:grayscale(.9);pointer-events:none}
-  .tw-worlds-card.tw-worlds-locked:hover{transform:none}
-  .tw-worlds-prev{width:100%;aspect-ratio:16/10;border-radius:8px;background:#05070e;image-rendering:pixelated;display:block;
-    box-shadow:0 2px 8px -2px rgba(0,0,0,.5)}
-  .tw-worlds-card h3{margin:2px 0;font-size:15px;text-transform:uppercase;letter-spacing:.04em;display:flex;justify-content:space-between;align-items:center;gap:8px}
+    box-shadow:inset 0 1px 0 rgba(160,190,255,.18),0 28px 80px -24px rgba(0,0,0,.85),0 10px 24px -12px rgba(0,0,0,.62);
+    transition:transform .18s ease,opacity .18s ease,filter .18s ease,box-shadow .18s ease;will-change:transform,opacity;cursor:pointer}
+  .tw-worlds-card[data-offset="0"]{transform:translate(-50%,-50%) translateX(0) translateY(16px) scale(1);opacity:1;z-index:6;cursor:default;
+    border-color:rgba(78,230,80,.68);box-shadow:inset 0 1px 0 rgba(214,255,218,.22),0 0 0 1px rgba(78,230,80,.28),0 0 34px rgba(52,225,88,.36),0 36px 92px -26px rgba(0,0,0,.9)}
+  .tw-worlds-card[data-offset="-1"]{transform:translate(-50%,-50%) translateX(-415px) translateY(58px) scale(.72);opacity:.82;z-index:4;filter:saturate(.9) brightness(.82)}
+  .tw-worlds-card[data-offset="1"]{transform:translate(-50%,-50%) translateX(415px) translateY(58px) scale(.72);opacity:.82;z-index:4;filter:saturate(.9) brightness(.82)}
+  .tw-worlds-card[data-offset="-2"]{transform:translate(-50%,-50%) translateX(-735px) translateY(88px) scale(.56);opacity:.44;z-index:2;filter:saturate(.72) brightness(.66)}
+  .tw-worlds-card[data-offset="2"]{transform:translate(-50%,-50%) translateX(735px) translateY(88px) scale(.56);opacity:.44;z-index:2;filter:saturate(.72) brightness(.66)}
+  .tw-worlds-card[data-hidden="true"]{opacity:0;pointer-events:none;transform:translate(-50%,-50%) scale(.45)}
+  .tw-worlds-card[data-offset="0"]::before{content:"";position:absolute;left:50%;top:-118px;width:2px;height:112px;transform:translateX(-50%);
+    background:linear-gradient(180deg,rgba(66,255,87,0),rgba(66,255,87,.94));box-shadow:0 0 18px rgba(66,255,87,.8)}
+  .tw-worlds-card[data-offset="0"]::after{content:"";position:absolute;left:50%;bottom:-18px;width:92%;height:42px;transform:translateX(-50%);border-radius:50%;
+    border:2px solid rgba(66,255,87,.68);box-shadow:0 0 34px rgba(66,255,87,.46),inset 0 0 28px rgba(66,255,87,.18);pointer-events:none}
+  .tw-worlds-card:not([data-offset="0"]) .tw-worlds-actions{display:none}
+  .tw-worlds-card.tw-worlds-locked{opacity:.42;filter:grayscale(.85) brightness(.72)}
+  .tw-worlds-card.tw-worlds-locked[data-offset="0"]{opacity:.74}
+  .tw-worlds-card.tw-worlds-locked[data-hidden="true"]{opacity:0;pointer-events:none}
+  .tw-worlds-card h3{margin:0;font-size:23px;text-transform:uppercase;letter-spacing:.04em;display:flex;justify-content:center;align-items:center;gap:10px;text-align:center}
+  .tw-worlds-card:not([data-offset="0"]) h3{font-size:19px}
+  .tw-worlds-prev{width:100%;aspect-ratio:16/9;border-radius:5px;background:#05070e;image-rendering:pixelated;display:block;
+    box-shadow:0 18px 38px -20px rgba(0,0,0,.9),0 0 26px rgba(27,155,255,.14)}
+  .tw-worlds-card[data-offset="0"] .tw-worlds-prev{box-shadow:0 20px 44px -20px rgba(0,0,0,.95),0 0 42px rgba(66,255,87,.3)}
   .tw-badge{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 7px;border-radius:6px}
   .tw-badge.unclaimed{background:rgba(19,52,107,.7);color:#9cc0ff;border:1px solid rgba(80,130,230,.25)}
   .tw-badge.draft{background:rgba(90,64,18,.7);color:#ffd690;border:1px solid rgba(200,160,60,.2)}
   .tw-badge.published{background:rgba(20,83,42,.7);color:#95e6b3;border:1px solid rgba(60,200,100,.2)}
-  .tw-worlds-meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:11px;opacity:.85;font-family:'Space Grotesk',system-ui,sans-serif}
+  .tw-worlds-meta{display:flex;justify-content:center;gap:20px;flex-wrap:wrap;font-size:13px;opacity:.9;font-family:'Space Grotesk',system-ui,sans-serif}
+  .tw-worlds-card:not([data-offset="0"]) .tw-worlds-meta{display:none}
   .tw-worlds-meta b{opacity:.6;font-weight:400}
-  .tw-worlds-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+  .tw-worlds-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
   .tw-btn{flex:1;min-width:80px;border:0;border-radius:10px;padding:9px;cursor:pointer;color:#fff;
     font:700 11px/1 'Pixelify Sans',ui-monospace,monospace;text-transform:uppercase;letter-spacing:.05em;
     background:linear-gradient(180deg,#3a6fe0 0%,#2b59d6 100%);
@@ -174,6 +225,42 @@
   .tw-btn.alt{background:rgba(30,40,80,.6);box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 2px 6px -2px rgba(0,0,0,.3)}
   .tw-btn.go{background:linear-gradient(180deg,#62cc44 0%,#4aab2e 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.24),0 4px 12px -4px rgba(74,171,46,.4)}
   .tw-btn:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.5)}
+  .tw-worlds-actions .tw-btn.go{min-height:48px;font-size:13px;border-radius:7px;box-shadow:inset 0 1px 0 rgba(255,255,255,.32),0 0 22px rgba(74,221,53,.38),0 8px 24px -10px rgba(74,221,53,.7)}
+  .tw-worlds-nav{position:absolute;top:55%;z-index:8;width:58px;height:58px;border-radius:50%;border:1px solid rgba(133,164,221,.3);display:grid;place-items:center;
+    background:linear-gradient(180deg,rgba(36,52,87,.9),rgba(19,30,55,.92));color:#eef5ff;cursor:pointer;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 14px 32px -16px rgba(0,0,0,.9)}
+  .tw-worlds-nav:hover{filter:brightness(1.16)}
+  .tw-worlds-prev-btn{left:calc(50% - 370px)}
+  .tw-worlds-next-btn{right:calc(50% - 370px)}
+  .tw-worlds-dots{display:flex;gap:13px;align-items:center;justify-content:center;min-height:26px;margin:6px 0 14px}
+  .tw-worlds-dot{width:8px;height:8px;border-radius:50%;border:0;background:rgba(124,146,179,.46);cursor:pointer;padding:0}
+  .tw-worlds-dot.active{width:17px;height:17px;background:#4bed59;box-shadow:0 0 18px rgba(75,237,89,.85)}
+  .tw-worlds-controls{display:flex;align-items:center;justify-content:center;gap:10px;width:min(520px,calc(100vw - 48px))}
+  .tw-worlds-search-wrap{position:relative;flex:1}
+  .tw-worlds-search-wrap svg{position:absolute;left:15px;top:50%;transform:translateY(-50%);color:#8999b9;pointer-events:none}
+  .tw-worlds-search{width:100%;box-sizing:border-box;height:46px;border-radius:8px;border:1px solid rgba(106,133,184,.32);
+    background:rgba(5,11,24,.74);color:#eef5ff;padding:0 14px 0 44px;font:600 15px 'Space Grotesk',system-ui,sans-serif;outline:none}
+  .tw-worlds-search::placeholder{color:#8290a8}
+  .tw-worlds-search:focus{border-color:rgba(70,224,88,.62);box-shadow:0 0 0 3px rgba(70,224,88,.16)}
+  .tw-worlds-filter{height:46px;border-radius:8px;border:1px solid rgba(106,133,184,.32);padding:0 15px;display:flex;gap:9px;align-items:center;
+    background:rgba(13,23,43,.82);color:#bfcbe0;font:700 12px 'Pixelify Sans',ui-monospace,monospace;text-transform:uppercase;letter-spacing:.06em;cursor:pointer}
+  .tw-worlds-filter.active{color:#95f0a5;border-color:rgba(70,224,88,.5);box-shadow:0 0 18px rgba(70,224,88,.16)}
+  .tw-worlds-empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:#b8c3d8;font:700 14px 'Space Grotesk',system-ui,sans-serif}
+  @media (max-width:860px){
+    .tw-worlds-wrap{padding:30px 14px 24px}
+    .tw-worlds-head-actions{right:14px;top:18px}
+    .tw-worlds-title{font-size:19px}
+    .tw-worlds-title::before,.tw-worlds-title::after{width:18px}
+    .tw-worlds-stage{min-height:430px;height:52vh;margin-top:18px}
+    .tw-worlds-card{width:min(420px,calc(100vw - 36px));min-height:352px}
+    .tw-worlds-card[data-offset="-1"],.tw-worlds-card[data-offset="1"],.tw-worlds-card[data-offset="-2"],.tw-worlds-card[data-offset="2"]{opacity:0;pointer-events:none}
+    .tw-worlds-card h3{font-size:18px}
+    .tw-worlds-meta{gap:10px;font-size:12px}
+    .tw-worlds-prev-btn{left:12px}
+    .tw-worlds-next-btn{right:12px}
+    .tw-worlds-nav{width:46px;height:46px;top:53%}
+    .tw-worlds-controls{flex-wrap:wrap}
+    .tw-worlds-filter{width:100%;justify-content:center}
+  }
   .tw-modal-back{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;
     background:rgba(3,5,16,.65);backdrop-filter:blur(10px) saturate(130%);-webkit-backdrop-filter:blur(10px) saturate(130%)}
   .tw-modal{background:rgba(8,11,28,.88);border:1px solid rgba(80,110,200,.26);border-radius:14px;padding:20px;width:min(420px,92vw);color:#eef3ff;
@@ -201,7 +288,8 @@
     }
   
     // ---- state ----
-    let overlay = null, gridEl = null;
+    let overlay = null, gridEl = null, dotsEl = null, searchEl = null, filterEl = null;
+    let worldsCache = [], selectedWorldSlug = '', worldSearch = '', publishedOnly = false;
     let me = null;
     let savedFreeform = null;   // freeform world to restore when leaving a world
 
@@ -217,16 +305,58 @@
       if (overlay) return overlay;
       injectStyles();
       gridEl = el('div', { class: 'tw-worlds-grid' });
+      dotsEl = el('div', { class: 'tw-worlds-dots', role: 'tablist', 'aria-label': 'Worlds' });
+      searchEl = el('input', {
+        class: 'tw-worlds-search',
+        type: 'search',
+        placeholder: 'Search worlds...',
+        autocomplete: 'off',
+        'aria-label': 'Search worlds',
+      });
+      searchEl.addEventListener('input', () => {
+        worldSearch = searchEl.value.trim().toLowerCase();
+        selectedWorldSlug = '';
+        renderPicker();
+      });
+      filterEl = el('button', {
+        class: 'tw-worlds-filter',
+        type: 'button',
+        onclick: () => {
+          publishedOnly = !publishedOnly;
+          selectedWorldSlug = '';
+          renderPicker();
+        },
+      }, [makeIcon('filters', 15), el('span', { text: 'Filters' })]);
+      const stage = el('div', { class: 'tw-worlds-stage' }, [
+        el('button', {
+          class: 'tw-worlds-nav tw-worlds-prev-btn',
+          type: 'button',
+          'aria-label': 'Previous world',
+          onclick: () => rotateWorldSelection(-1),
+        }, [makeIcon('chevronLeft', 28)]),
+        gridEl,
+        el('button', {
+          class: 'tw-worlds-nav tw-worlds-next-btn',
+          type: 'button',
+          'aria-label': 'Next world',
+          onclick: () => rotateWorldSelection(1),
+        }, [makeIcon('chevronRight', 28)]),
+      ]);
+      const controls = el('div', { class: 'tw-worlds-controls' }, [
+        el('label', { class: 'tw-worlds-search-wrap' }, [makeIcon('search', 17), searchEl]),
+        filterEl,
+      ]);
+      const titleText = T('worlds.chooseWorld') === 'worlds.chooseWorld' ? 'Choose your world' : T('worlds.chooseWorld');
       const head = el('div', { class: 'tw-worlds-head' }, [
-        el('div', {}, [el('h2', { text: T('worlds.title') }), el('p', { text: T('worlds.subtitle') })]),
-        el('div', { style: 'display:flex;gap:8px;align-items:center' }, [
+        el('h2', { class: 'tw-worlds-title', text: titleText }),
+        el('div', { class: 'tw-worlds-head-actions' }, [
           el('button', { class: 'tw-worlds-x', title: T('worlds.avatarOpen'),
             onclick: () => { if (typeof WS.openAvatarPicker === 'function') WS.openAvatarPicker(); } },
             [makeIcon('person', 16), el('span', { text: T('worlds.avatarOpen'), style: 'margin-left:6px' })]),
           el('button', { class: 'tw-worlds-x', onclick: closeOverlay, text: T('worlds.close') }),
         ]),
       ]);
-      overlay = el('div', { class: 'tw-worlds-overlay' }, [el('div', { class: 'tw-worlds-wrap' }, [head, gridEl])]);
+      overlay = el('div', { class: 'tw-worlds-overlay' }, [el('div', { class: 'tw-worlds-wrap' }, [head, stage, dotsEl, controls])]);
       document.body.appendChild(overlay);
       return overlay;
     }
@@ -234,26 +364,104 @@
     function openOverlay() { ensureOverlay().classList.add('open'); loadWorlds(); }
     function closeOverlay() { if (overlay) overlay.classList.remove('open'); }
   
-        async function loadWorlds() {
+    async function loadWorlds() {
       if (!gridEl) return;
       gridEl.textContent = "";
-      if (location.hostname.includes("mmo-preview")) {
-        const seeds = [
-          { slug: "tidewater-bay", name: "Tidewater Bay", status: "published", kind: "starter", gridSize: 20, tileCount: 400, taxPercent: 10, activePlayers: 0 },
-          { slug: "iron-ridge", name: "Iron Ridge", status: "published", kind: "starter", gridSize: 18, tileCount: 324, taxPercent: 10, activePlayers: 0 },
-          { slug: "crystal-canyon", name: "Crystal Canyon", status: "published", kind: "starter", gridSize: 20, tileCount: 400, taxPercent: 10, activePlayers: 0 }
-        ];
-        for (const w of seeds) gridEl.appendChild(renderCard(w));
-        return;
-      }
-      gridEl.appendChild(el("p", { text: T("worlds.loading"), style: "opacity:.6" }));
+      gridEl.appendChild(el("p", { class: 'tw-worlds-empty', text: T("worlds.loading") }));
       const res = await api("/api/worlds", "GET");
-      if (!res || res.error) { gridEl.textContent = ""; gridEl.appendChild(el("p", { text: res && res.error ? res.error : T("worlds.empty") })); return; }
+      if (!res || res.error) { worldsCache = []; gridEl.textContent = ""; gridEl.appendChild(el("p", { class: 'tw-worlds-empty', text: res && res.error ? res.error : T("worlds.empty") })); return; }
       me = res.me || null;
       const worlds = (Array.isArray(res.worlds) ? res.worlds : []).filter(w => validWorldSlug(w && w.slug));
-      gridEl.textContent = "";
-      if (!worlds.length) { gridEl.appendChild(el("p", { text: T("worlds.empty") })); return; }
-      for (const w of worlds) gridEl.appendChild(renderCard(w));
+      setWorlds(worlds);
+    }
+
+    function setWorlds(worlds) {
+      worldsCache = Array.isArray(worlds) ? worlds.slice() : [];
+      if (!selectedWorldSlug) {
+        const active = activeTinyverseSlug();
+        const preferred = worldsCache.find(w => w.slug === active) || worldsCache.find(w => w.slug === 'tidewater-bay') || worldsCache.find(w => w.status === 'published') || worldsCache[0];
+        selectedWorldSlug = preferred ? preferred.slug : '';
+      }
+      renderPicker();
+    }
+
+    function worldTitle(w) {
+      const baseTitle = w.name || (w.kind === 'starter' ? w.slug : T('worlds.statusUnclaimed'));
+      return baseTitle + (w.slug === 'tidewater-bay' ? ' (demo)' : '');
+    }
+
+    function visibleWorlds() {
+      const q = worldSearch || '';
+      return worldsCache.filter(w => {
+        if (publishedOnly && w.status !== 'published') return false;
+        if (!q) return true;
+        const hay = [
+          worldTitle(w),
+          w.slug,
+          w.status,
+          w.ownerName,
+          w.gridSize,
+          w.tileCount,
+          w.taxPercent,
+        ].join(' ').toLowerCase();
+        return hay.includes(q);
+      });
+    }
+
+    function selectedIndexFor(list) {
+      if (!list.length) return -1;
+      let idx = list.findIndex(w => w.slug === selectedWorldSlug);
+      if (idx >= 0) return idx;
+      idx = list.findIndex(w => w.status === 'published');
+      return idx >= 0 ? idx : 0;
+    }
+
+    function carouselOffset(index, selectedIndex, count) {
+      let offset = index - selectedIndex;
+      if (count > 2) {
+        const half = count / 2;
+        if (offset > half) offset -= count;
+        if (offset < -half) offset += count;
+      }
+      return offset;
+    }
+
+    function rotateWorldSelection(delta) {
+      const worlds = visibleWorlds();
+      if (!worlds.length) return;
+      const idx = selectedIndexFor(worlds);
+      const next = (idx + delta + worlds.length) % worlds.length;
+      selectedWorldSlug = worlds[next].slug;
+      renderPicker();
+    }
+
+    function renderPicker() {
+      if (!gridEl) return;
+      const worlds = visibleWorlds();
+      gridEl.textContent = '';
+      if (dotsEl) dotsEl.textContent = '';
+      if (filterEl) {
+        filterEl.classList.toggle('active', !!publishedOnly);
+        const span = filterEl.querySelector('span');
+        if (span) span.textContent = publishedOnly ? 'Live only' : 'Filters';
+      }
+      if (!worlds.length) {
+        gridEl.appendChild(el('p', { class: 'tw-worlds-empty', text: T('worlds.empty') }));
+        return;
+      }
+      const selectedIndex = selectedIndexFor(worlds);
+      selectedWorldSlug = worlds[selectedIndex].slug;
+      worlds.forEach((w, i) => gridEl.appendChild(renderCard(w, i, selectedIndex, worlds.length)));
+      if (dotsEl) {
+        worlds.forEach((w, i) => dotsEl.appendChild(el('button', {
+          class: 'tw-worlds-dot' + (i === selectedIndex ? ' active' : ''),
+          type: 'button',
+          role: 'tab',
+          'aria-selected': i === selectedIndex ? 'true' : 'false',
+          'aria-label': worldTitle(w),
+          onclick: () => { selectedWorldSlug = w.slug; renderPicker(); },
+        })));
+      }
     }
   
     function statusBadge(status) {
@@ -261,13 +469,16 @@
       return el('span', { class: 'tw-badge ' + status, text: map[status] || status });
     }
   
-    function renderCard(w) {
+    function renderCard(w, index, selectedIndex, count) {
       // All PUBLISHED worlds are playable (rich starter islands + claimed worlds);
       // unclaimed plots stay locked/greyed. Access to the whole Tinyverse is
       // already gated to allowlisted accounts server-side.
-      const isDemo = w.slug === 'tidewater-bay';
-      const locked = w.status !== 'published';
+      const offset = carouselOffset(index, selectedIndex, count);
+      const hidden = Math.abs(offset) > 2;
+      const shownOffset = Math.max(-2, Math.min(2, offset));
+      const selected = index === selectedIndex;
       const mine = me && w.ownerProfileId != null && Number(w.ownerProfileId) === Number(me.id);
+      const locked = w.status === 'unclaimed' || (w.status === 'draft' && !mine);
       const meta = el('div', { class: 'tw-worlds-meta' }, [
         el('div', {}, [el('b', { text: T('worlds.tiles') + ': ' }), document.createTextNode(String(w.tileCount))]),
         el('div', {}, [el('b', { text: T('worlds.players') + ': ' }), document.createTextNode(String(w.activePlayers || 0))]),
@@ -277,21 +488,34 @@
       const actions = el('div', { class: 'tw-worlds-actions' });
       if (w.status === 'unclaimed') {
         // Cost intentionally hidden.
-        actions.appendChild(el('button', { class: 'tw-btn', text: T('worlds.buy'), onclick: () => buyFlow(w) }));
+        actions.appendChild(el('button', { class: 'tw-btn', text: T('worlds.buy'), onclick: (e) => { e.stopPropagation(); buyFlow(w); } }));
       } else if (w.status === 'published') {
-        actions.appendChild(el('button', { class: 'tw-btn go', text: T('worlds.enter'), onclick: () => enterWorld(w) }));
-        if (mine) actions.appendChild(el('button', { class: 'tw-btn alt', text: T('worlds.manage'), onclick: () => manageFlow(w) }));
+        actions.appendChild(el('button', { class: 'tw-btn go', text: T('worlds.enter'), onclick: (e) => { e.stopPropagation(); enterWorld(w); } }));
+        if (mine) actions.appendChild(el('button', { class: 'tw-btn alt', text: T('worlds.manage'), onclick: (e) => { e.stopPropagation(); manageFlow(w); } }));
       } else if (w.status === 'draft' && mine) {
-        actions.appendChild(el('button', { class: 'tw-btn', text: T('worlds.build'), onclick: () => buildDraft(w) }));
-        actions.appendChild(el('button', { class: 'tw-btn alt', text: T('worlds.manage'), onclick: () => manageFlow(w) }));
+        actions.appendChild(el('button', { class: 'tw-btn', text: T('worlds.build'), onclick: (e) => { e.stopPropagation(); buildDraft(w); } }));
+        actions.appendChild(el('button', { class: 'tw-btn alt', text: T('worlds.manage'), onclick: (e) => { e.stopPropagation(); manageFlow(w); } }));
       }
-      const baseTitle = w.name || (w.kind === 'starter' ? w.slug : T('worlds.statusUnclaimed'));
-      const title = baseTitle + (isDemo ? ' (demo)' : '');
       const prev = el('canvas', { class: 'tw-worlds-prev', width: '320', height: '200' });
-      const card = el('div', { class: 'tw-worlds-card' + (locked ? ' tw-worlds-locked' : '') }, [
+      const card = el('article', { class: 'tw-worlds-card' + (locked ? ' tw-worlds-locked' : ''), 'data-offset': String(shownOffset), 'data-hidden': hidden ? 'true' : 'false' }, [
         prev,
-        el('h3', {}, [document.createTextNode(title), statusBadge(w.status)]), meta, actions,
+        el('h3', {}, [document.createTextNode(worldTitle(w)), statusBadge(w.status)]), meta, actions,
       ]);
+      card.tabIndex = hidden ? -1 : 0;
+      card.setAttribute('aria-selected', selected ? 'true' : 'false');
+      card.addEventListener('click', () => {
+        if (!selected) {
+          selectedWorldSlug = w.slug;
+          renderPicker();
+        }
+      });
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          selectedWorldSlug = w.slug;
+          renderPicker();
+        }
+      });
       if (locked) {
         card.setAttribute('aria-disabled', 'true');
         actions.querySelectorAll('button').forEach((b) => { b.disabled = true; });
@@ -404,6 +628,11 @@
   
     // ---- build a draft (load its tiles into the existing builder) ----
     async function buildDraft(w) {
+      if (typeof WS.leaveRoom === 'function') {
+        try { WS.leaveRoom(); } catch (_) {}
+      } else if (typeof WS.setPlayChrome === 'function') {
+        try { WS.setPlayChrome(false); } catch (_) {}
+      }
       const full = await api('/api/worlds?id=' + w.id, 'GET');
       const data = full && full.world && full.world.data ? full.world.data : { v: 4, cells: [] };
       rememberFreeform();
@@ -466,7 +695,7 @@
       closeOverlay();
       if (typeof WS.enterRoom === 'function') {
         // CCTV-only view (?view=cctv) forces a passive observer join.
-        const role = window.__tinyworldForceRole || full.role || 'play';
+        const role = window.__tinyworldForceRole === 'observe' ? 'observe' : 'play';
         WS.enterRoom(full.world, full.token || '', role);
         return true;
       }
@@ -475,21 +704,15 @@
     }
 
     async function enterWorld(w) {
-      if (location.hostname.includes("mmo-preview") && w && w.slug) {
-        const full = { world: { id: 1, slug: w.slug, name: w.name, status: 'published', gridSize: w.gridSize || 20, data: {v:4, gridSize: w.gridSize||20, cells: [] } }, token: "" };
-        return enterWorldFull(full);
-      }
-      const full = await api("/api/worlds?id=" + w.id, "GET");
+      const full = w && w.id != null
+        ? await api("/api/worlds?id=" + w.id, "GET")
+        : await api("/api/worlds?slug=" + encodeURIComponent(validWorldSlug(w && w.slug)), "GET");
       return enterWorldFull(full);
     }
 
     async function enterBySlug(slug) {
       const s = validWorldSlug(slug);
       if (!s) { toast(T("worlds.error")); return false; }
-      if (location.hostname.includes("mmo-preview")) {
-        const full = { world: { id: 1, slug: s, name: s, status: 'published', gridSize: 20, data: {v:4, gridSize:20, cells: [] } }, token: "" };
-        return enterWorldFull(full);
-      }
       const full = await api("/api/worlds?slug=" + encodeURIComponent(s), "GET");
       return enterWorldFull(full);
     }
@@ -542,7 +765,13 @@
       if (!resumeSlug) return;
       await waitForEnterRoom();
       dismissWelcomeForDemoEntry();
-      await enterBySlug(resumeSlug);
+      const ok = await enterBySlug(resumeSlug);
+      if (!ok) {
+        clearActiveTinyverseSession();
+        try {
+          if (typeof window.__tinyworldShowWelcomeLaunch === 'function') window.__tinyworldShowWelcomeLaunch();
+        } catch (_) {}
+      }
     }
   
     // Netlify deploy previews (and embeds) add a bottom bar/iframe chrome that

@@ -392,6 +392,9 @@ test('deriveWorldState: connected water => one shared fish body, ore/plant nodes
       { x: 5, z: 5, terrain: 'stone' },
       { x: 4, z: 2, terrain: 'dirt', kind: 'corn' },
       { x: 3, z: 3, terrain: 'grass', kind: 'tree' },
+      { x: 3, z: 4, terrain: 'grass', kind: 'house' },
+      { x: 3, z: 5, terrain: 'grass', kind: 'lamp-post' },
+      { x: 4, z: 4, terrain: 'grass', kind: 'stargate' },
       { x: 6, z: 6, terrain: 'grass', kind: 'bush' },
       { x: 6, z: 7, terrain: 'grass', kind: 'flower' },
       { x: 7, z: 6, terrain: 'grass', kind: 'tuft' },
@@ -409,6 +412,9 @@ test('deriveWorldState: connected water => one shared fish body, ore/plant nodes
   assert.equal(state.grassCells.indexOf('5,5'), -1, 'stone is not standable');
   assert.ok(state.grassCells.indexOf('1,1') >= 0, 'water is standable');
   assert.equal(state.grassCells.indexOf('3,3'), -1, 'tree blocks standing');
+  assert.equal(state.grassCells.indexOf('3,4'), -1, 'buildings block standing');
+  assert.equal(state.grassCells.indexOf('3,5'), -1, 'unknown object kinds are solid by default');
+  assert.ok(state.grassCells.indexOf('4,4') >= 0, 'stargate is standable');
   assert.ok(state.grassCells.indexOf('6,6') >= 0, 'bush is standable');
   assert.ok(state.grassCells.indexOf('6,7') >= 0, 'flower is standable');
   assert.ok(state.grassCells.indexOf('7,6') >= 0, 'tuft is standable');
@@ -584,7 +590,7 @@ test('worldPreview emits sparse terrain/kind tuples for the card minimap', () =>
   assert.equal(worldPreview({ cells: [] }).length, 0);
 });
 
-test('normalizeWorldSelectionGateData strips legacy stargates without creating picker gates', () => {
+test('normalizeWorldSelectionGateData strips legacy stargates and guarantees one center picker gate', () => {
   const normalized = normalizeWorldSelectionGateData({
     v: 4, gridSize: 6,
     cells: [
@@ -596,11 +602,12 @@ test('normalizeWorldSelectionGateData strips legacy stargates without creating p
     ],
   });
   const gates = normalized.cells.filter(c => c && (Array.isArray(c) ? c[3] : c.kind) === 'stargate');
-  assert.equal(gates.length, 0);
+  assert.equal(gates.length, 1);
+  assert.deepEqual(gates[0], { x: 3, z: 3, terrain: 'grass', kind: 'stargate', dest: '__world-picker' });
   assert.equal(normalized.cells.some(c => c && c.x === 0 && c.z === 0), false, 'old stargate removed');
   assert.equal(normalized.cells.some(c => c && c.x === 1 && c.z === 1 && c.terrain === 'stone' && !c.kind), true, 'non-grass stargate terrain stays');
   assert.equal(normalized.cells.some(c => Array.isArray(c) && c[0] === 2 && c[1] === 2 && c[2] === 'dirt' && !c[3]), true, 'array stargate terrain stays without kind');
-  assert.equal(normalized.cells.some(c => c && c.x === 3 && c.z === 3 && c.kind === 'rock'), true, 'center non-gate object stays');
+  assert.equal(normalized.cells.some(c => c && c.x === 3 && c.z === 3 && c.kind === 'rock'), false, 'center object is replaced by the required gate');
   assert.equal(normalized.cells.some(c => c && c.x === 4 && c.z === 4 && c.terrain === 'water'), true, 'unrelated terrain stays');
 });
 

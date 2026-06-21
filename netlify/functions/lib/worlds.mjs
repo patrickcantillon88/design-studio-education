@@ -12,14 +12,20 @@ export const WORLD_RESOURCES = ['fish', 'meat', 'plants', 'ore'];
 export const WORLD_STATUSES = ['unclaimed', 'draft', 'published'];
 export const MAX_WORLD_NAME = 48;
 export const TINYVERSE_HUB_SLUG = 'tinyverse-nexus';
+const WORLD_SELECTION_GATE_DEST = '__world-picker';
 
 function worldCellX(cell) { return Array.isArray(cell) ? cell[0] : (cell && cell.x); }
 function worldCellZ(cell) { return Array.isArray(cell) ? cell[1] : (cell && cell.z); }
 function worldCellKind(cell) { return Array.isArray(cell) ? cell[3] : (cell && cell.kind); }
+function worldSelectionGateCell(gridSize) {
+  const center = Math.floor(Math.max(1, gridSize) / 2);
+  return { x: center, z: center, terrain: 'grass', kind: 'stargate', dest: WORLD_SELECTION_GATE_DEST };
+}
 
 export function normalizeWorldSelectionGateData(data, gridSizeHint) {
   const src = data && typeof data === 'object' ? data : { v: 4, cells: [] };
   const gridSize = Math.max(1, Math.round(Number(src.gridSize || gridSizeHint) || 8));
+  const gate = worldSelectionGateCell(gridSize);
   const cells = Array.isArray(src.cells) ? src.cells : [];
   const nextCells = [];
 
@@ -28,7 +34,7 @@ export function normalizeWorldSelectionGateData(data, gridSizeHint) {
     const z = Math.round(Number(worldCellZ(cell)));
     if (!Number.isFinite(x) || !Number.isFinite(z)) continue;
     if (worldCellKind(cell) === 'stargate') {
-      // World selection is UI chrome now; strip legacy physical gates.
+      // Strip legacy multi-gates; the normalizer adds one center exit gate.
       const terrain = (Array.isArray(cell) ? cell[2] : (cell && cell.terrain)) || 'grass';
       if (terrain && terrain !== 'grass') nextCells.push(Array.isArray(cell) ? [x, z, terrain] : { x, z, terrain });
       continue;
@@ -36,10 +42,17 @@ export function normalizeWorldSelectionGateData(data, gridSizeHint) {
     nextCells.push(cell);
   }
 
+  const normalizedCells = nextCells.filter(cell => {
+    const x = Math.round(Number(worldCellX(cell)));
+    const z = Math.round(Number(worldCellZ(cell)));
+    return x !== gate.x || z !== gate.z;
+  });
+  normalizedCells.push(gate);
+
   return Object.assign({}, src, {
     v: src.v || 4,
     gridSize,
-    cells: nextCells,
+    cells: normalizedCells,
   });
 }
 

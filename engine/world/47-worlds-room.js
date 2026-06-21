@@ -282,7 +282,11 @@ function computeTaxCooldown(lastTaxChangeAt) {
       try { window.__twTiltWasOff = document.body.classList.contains('tilt-blur-off'); document.body.classList.add('tilt-blur-off'); } catch (_) {}
       // Force play mode so all edit gates block building while in a tinyverse world.
       const mode = window.__tinyworldMode;
-      if (mode) { prevPlayMode = mode.isPlay(); mode.setPlay(); }
+      if (mode) {
+        prevPlayMode = mode.isPlay();
+        if (typeof mode.setPlayTemporary === 'function') mode.setPlayTemporary();
+        else mode.setPlay();
+      }
       // Install a compatible broadcastFlight / flightGhosts stub so 34-flight-sim.js
       // can call broadcastFlight() while the player is in a tinyverse world room.
       // Save and restore the previous value so 38-multiplayer-partykit stays intact
@@ -365,9 +369,11 @@ function computeTaxCooldown(lastTaxChangeAt) {
       hideBaseMinimap(false);
       if (typeof WS.setPlayChrome === 'function') WS.setPlayChrome(false);
       try { if (!window.__twTiltWasOff) document.body.classList.remove('tilt-blur-off'); } catch (_) {}
-      // Restore whichever build/play mode the user had before entering the room.
+      // Leaving a multiplayer room should restore normal building chrome. Room play
+      // mode is temporary and must not trap the app in persisted Play after refresh.
       const mode = window.__tinyworldMode;
-      if (mode && prevPlayMode !== null) { if (prevPlayMode) mode.setPlay(); else mode.setBuild(); prevPlayMode = null; }
+      if (mode && typeof mode.setBuild === 'function') mode.setBuild();
+      prevPlayMode = null;
       emit('leave', {});
     }
 
@@ -769,8 +775,16 @@ function computeTaxCooldown(lastTaxChangeAt) {
     }
   
     // ---- movement + click-to-walk pathfinding ----
-    // Low ground cover (bush, flower, tuft) is walkable — avatars stroll over it.
-    const BLOCKED_KINDS = new Set(['house', 'tree', 'rock', 'fence', 'voxel-build', 'model-stamp']);
+    // Low ground cover, animals, plants, bridges, and stargates are walkable.
+    // Unknown object kinds are solid by default, matching the PartyKit validator.
+    const STANDABLE_OBJECT_KINDS = new Set([
+      'stargate', 'bridge', 'bush', 'flower', 'tuft',
+      'crop', 'corn', 'wheat', 'pumpkin', 'carrot', 'sunflower',
+      'cow', 'sheep',
+    ]);
+    function isWorldRoomStandableKind(kind) {
+      return !kind || STANDABLE_OBJECT_KINDS.has(kind);
+    }
     let blocked = new Set();   // 'x,z' cells you cannot stand on (mirrors server)
     function rebuildBlocked() {
       blocked = new Set();
@@ -778,7 +792,7 @@ function computeTaxCooldown(lastTaxChangeAt) {
         const x = Array.isArray(c) ? c[0] : c.x, z = Array.isArray(c) ? c[1] : c.z;
         if (x == null || z == null) continue;
         const ter = Array.isArray(c) ? c[2] : c.terrain, k = Array.isArray(c) ? c[3] : c.kind;
-        if (ter === 'lava' || ter === 'stone' || (k && BLOCKED_KINDS.has(k))) blocked.add(x + ',' + z);   // water walkable
+        if (ter === 'lava' || ter === 'stone' || !isWorldRoomStandableKind(k)) blocked.add(x + ',' + z);   // water walkable
       }
     }
     function standable(x, z) { return x >= 0 && z >= 0 && x < gridSize && z < gridSize && !blocked.has(x + ',' + z); }
@@ -2017,17 +2031,16 @@ function tryEnterGate() {
     }
   
     function mapCellRect(x, z) {
-      return { x: x * CELL, y: (gridSize - 1 - z) * CELL };
+      return { x: x * CELL, y: z * CELL };
     }
     function mapCellCenter(x, z) {
-      return { x: x * CELL + CELL / 2, y: (gridSize - 1 - z) * CELL + CELL / 2 };
+      return { x: x * CELL + CELL / 2, y: z * CELL + CELL / 2 };
     }
     function mapCanvasPointToCell(px, py, width, height) {
       const sx = width > 0 ? width / Math.max(1, gridSize) : CELL;
       const sy = height > 0 ? height / Math.max(1, gridSize) : CELL;
       const cx = Math.floor(px / sx);
-      const row = Math.floor(py / sy);
-      const cz = gridSize - 1 - row;
+      const cz = Math.floor(py / sy);
       return { x: cx, z: cz };
     }
 
@@ -2579,9 +2592,16 @@ function tryEnterGate() {
       if (cm && typeof cm.bakedGroundY === 'number') return cm.bakedGroundY;
       return 0.02;
     }
+    function worldRoomTilePos(x, z) {
+      const g = Math.max(1, Math.round(Number(gridSize || (typeof GRID !== 'undefined' ? GRID : 8))) || 8);
+      if (typeof THREE !== 'undefined' && THREE && typeof THREE.Vector3 === 'function') {
+        return new THREE.Vector3(x - g / 2 + 0.5, 0, z - g / 2 + 0.5);
+      }
+      return { x: x - g / 2 + 0.5, y: 0, z: z - g / 2 + 0.5 };
+    }
     function placeEntity(ent) {
-      if (!ent || !ent.sprite || typeof tilePos !== 'function') return;
-      const p = tilePos(ent.x, ent.z);
+      if (!ent || !ent.sprite) return;
+      const p = worldRoomTilePos(ent.x, ent.z);
       const gy = voxelGroundY(ent.x, ent.z);
       ent.groundY = gy;
       if (ent.voxel) {
@@ -2952,6 +2972,10 @@ function tryEnterGate() {
     // faces the camera (the viewer) without any per-frame rotation. Same visual as
     // the 2D-map peer labels (makeNameSprite in 38-multiplayer-partykit). ----
     const NAME_HEAD_Y = 1.15;   // world-units above the avatar's feet; pill center sits just over the head
+    const NAME_TAG_SCREEN_HEIGHT = 30;   // CSS pixels; keep labels readable regardless of zoom
+    const NAME_TAG_ASPECT = 4;
+    const NAME_TAG_TMP_POS = (typeof THREE !== 'undefined') ? new THREE.Vector3() : null;
+    const NAME_TAG_TMP_CAM = (typeof THREE !== 'undefined') ? new THREE.Vector3() : null;
     function roundRectLabel(ctx, x, y, w, h, r) {
       ctx.beginPath();
       ctx.moveTo(x + r, y);
@@ -2988,8 +3012,38 @@ function tryEnterGate() {
       const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false, depthWrite: false });
       const sprite = new THREE.Sprite(material);
       sprite.scale.set(1.55, 0.38, 1);
+      sprite.userData.nameTagAspect = canvas.width / canvas.height || NAME_TAG_ASPECT;
       sprite.renderOrder = 13;   // above avatars (10) and chat bubbles (12)
       return sprite;
+    }
+    function nameTagViewportHeight() {
+      try {
+        if (typeof renderer !== 'undefined' && renderer && renderer.domElement) {
+          return renderer.domElement.clientHeight || renderer.domElement.height || window.innerHeight || 720;
+        }
+      } catch (_) {}
+      return (typeof window !== 'undefined' && window.innerHeight) ? window.innerHeight : 720;
+    }
+    function updateNameLabelScale(sprite) {
+      if (!sprite || typeof camera === 'undefined' || !camera) return;
+      const viewH = Math.max(1, nameTagViewportHeight());
+      let worldPerPixel = 0;
+      if (camera.isOrthographicCamera) {
+        const zoom = camera.zoom || 1;
+        worldPerPixel = Math.abs((camera.top - camera.bottom) / zoom) / viewH;
+      } else if (camera.isPerspectiveCamera && NAME_TAG_TMP_POS && NAME_TAG_TMP_CAM) {
+        sprite.getWorldPosition(NAME_TAG_TMP_POS);
+        camera.getWorldPosition(NAME_TAG_TMP_CAM);
+        const dist = Math.max(0.05, NAME_TAG_TMP_POS.distanceTo(NAME_TAG_TMP_CAM));
+        const fov = (typeof THREE !== 'undefined' && THREE.MathUtils)
+          ? THREE.MathUtils.degToRad(camera.fov || 50)
+          : (camera.fov || 50) * Math.PI / 180;
+        worldPerPixel = (2 * Math.tan(fov / 2) * dist) / viewH;
+      }
+      if (!(worldPerPixel > 0)) return;
+      const h = worldPerPixel * NAME_TAG_SCREEN_HEIGHT;
+      const aspect = (sprite.userData && sprite.userData.nameTagAspect) || NAME_TAG_ASPECT;
+      sprite.scale.set(h * aspect, h, 1);
     }
     function ensureNameLabel(ent, name, color) {
       if (!ent || !ent.sprite || typeof THREE === 'undefined') return;
@@ -3010,7 +3064,10 @@ function tryEnterGate() {
       const bubbleUp = !!(ent.bubble && ent.bubble.sprite && ent.bubble.sprite.visible);
       const show = !!ent.sprite && ent.sprite.visible !== false && !bubbleUp;
       s.visible = show;
-      if (show) s.position.set(ent.sprite.position.x, ent.sprite.position.y + NAME_HEAD_Y, ent.sprite.position.z);
+      if (show) {
+        s.position.set(ent.sprite.position.x, ent.sprite.position.y + NAME_HEAD_Y, ent.sprite.position.z);
+        updateNameLabelScale(s);
+      }
     }
     function removeNameLabel(ent) {
       if (!ent || !ent.nameTag) return;

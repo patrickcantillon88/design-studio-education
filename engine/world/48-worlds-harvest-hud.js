@@ -250,7 +250,7 @@
   
     on('enter', () => { show(); });
     on('leave', () => { hide(); });
-    on('status', () => setRole());
+    on('status', (d) => { if (!d || !d.connected) setRole(); });
     on('state', (s) => { buildHud(); if (s && s.you) renderHearts(s.you.hearts); setRole(); renderResources(); });
     on('you', (y) => { if (y) renderHearts(y.hearts); });
     on('resources', (r) => renderResources(r));

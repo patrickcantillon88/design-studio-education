@@ -27,9 +27,16 @@ Checks:
 - Right-drag and Space+drag pan smoothly.
 - Dragging/clicking the minimap canvas pans the camera target while dragging the minimap chrome/footer still moves the widget.
 - Minimap colours should track live scene materials plus time/weather theme tint, not a stale fixed palette.
-- Tinyverse world-map front/back orientation must match the island view and card
-  previews. Keep draw projection and click hit-testing paired; if one flips an
-  axis, the other must invert it too.
+- Tinyverse world-map orientation must match the synced island view and card
+  previews. The room minimap uses direct grid coordinates (`x * CELL`, `z *
+  CELL`) for drawing and the same direct inverse for clicks; do not rotate or
+  mirror it to chase a camera angle.
+- Tinyverse world picker is a carousel overlay, not an in-world board or a flat
+  admin grid. It must use real `/api/worlds` preview data, keep legacy
+  multi-gate data collapsed to the single center world-selection stargate, and
+  keep search/filter/arrow/dot navigation reachable on desktop and mobile.
+- Multiplayer avatar name tags should stay a fixed on-screen size while zooming
+  in perspective or orthographic camera modes.
 - Orbit still works with normal left-drag.
 - Ghost boards do not become editable.
 - The opacity torch is smooth and does not reveal square board seams.

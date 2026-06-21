@@ -63,11 +63,11 @@ function slugFromRequest(request) {
 
 // World access role for a client. `build` is retained for draft owner/editing
 // flows only; published multiplayer rooms downgrade stale build tokens to play.
-// play = logged-in in a published world, observe = guest in a published world.
+// play = authenticated/allowlisted in a published world, observe = guest in a published world.
 // null = no access.
-function roleFor(world, profileId) {
+function roleFor(world, profileId, canPlayPublished) {
   if (world.status === 'published') {
-    return profileId ? 'play' : 'observe';
+    return (profileId || canPlayPublished) ? 'play' : 'observe';
   }
   if (world.status === 'draft') {
     return profileId && Number(world.owner_profile_id) === Number(profileId) ? 'build' : null;
@@ -123,7 +123,7 @@ export default async function worldsFunction(request) {
         }
         const includeData = isWorldService || world.status === 'published' || isOwner || isWorldAdmin;
         const dto = withLivePrice(worldDto(world, { includeData }), economy);
-        let role = isWorldService ? null : roleFor(world, profile && profile.id);
+        let role = isWorldService ? null : roleFor(world, profile && profile.id, canAccessTinyverse || isWorldAdmin);
         // Community suspensions lock the player out of the game for their duration.
         let suspendedUntil = null;
         if (profile) {

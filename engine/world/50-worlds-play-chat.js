@@ -811,23 +811,31 @@
       return row;
     }
 
+    function resetChatForWorld() {
+      if (logEl) logEl.textContent = '';
+      typingPeers.forEach((v) => { try { clearTimeout(v.timer); } catch (_) {} });
+      typingPeers.clear();
+      if (typingEl) typingEl.textContent = '';
+      clearPendingReply();
+      peers = [];
+      unread = 0;
+      updateBadge();
+      renderPlayers(null);
+    }
+
     // ---- WS event wiring ---------------------------------------------------
     on('enter', () => {
       injectStyles();
       ensureToggle();
       ensurePanel();
+      resetChatForWorld();
       toggleEl.style.display = 'inline-flex';
     });
 
     on('leave', () => {
       if (toggleEl) toggleEl.style.display = 'none';
       closeChat();
-      // Reset state
-      typingPeers.clear();
-      if (typingEl) typingEl.textContent = '';
-      clearPendingReply();
-      peers = [];
-      unread = 0;
+      resetChatForWorld();
     });
 
     on('you', (you) => {

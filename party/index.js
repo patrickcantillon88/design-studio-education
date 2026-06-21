@@ -417,6 +417,14 @@ function nodeActionForCell(terrain, kind) {
   return null;
 }
 
+function isStandableObjectKind(kind) {
+  if (!kind) return true;
+  if (kind === 'stargate' || kind === 'bridge') return true;
+  if (PLANT_KINDS.has(kind) || ANIMAL_KINDS.has(kind)) return true;
+  // Low ground cover is decorative and should not block avatars.
+  return kind === 'bush' || kind === 'flower' || kind === 'tuft';
+}
+
 // Build the authoritative world state (node map + water bodies + standable grass)
 // from a world.schema.json v4 cells array. `rng` lets tests make ore tiers
 // deterministic. Empty cells (the default grid) are walkable grass.
@@ -479,9 +487,8 @@ function deriveWorldState(data, rng = Math.random) {
   }
 
   // Standable grass: any in-bounds cell that is not water/stone and carries no
-  // blocking object. Default (absent) cells are grass.
-  // Low ground cover (bush, flower, tuft) is walkable — avatars stroll over it.
-  const blockedKinds = new Set(['house', 'tree', 'rock', 'fence', 'voxel-build', 'model-stamp']);
+  // blocking object. Default (absent) cells are grass. Unknown object kinds are
+  // solid by default so new buildings/models do not become walk-through props.
   const grassCells = [];
   for (let x = 0; x < gridSize; x++) {
     for (let z = 0; z < gridSize; z++) {
@@ -489,7 +496,7 @@ function deriveWorldState(data, rng = Math.random) {
       const terrain = c ? cellTerrain(c) : 'grass';
       const kind = c ? cellKind(c) : null;
       if (terrain === 'lava' || terrain === 'stone') continue;   // water is now walkable (players cross it)
-      if (kind && blockedKinds.has(kind)) continue;
+      if (!isStandableObjectKind(kind)) continue;
       grassCells.push(x + ',' + z);
     }
   }

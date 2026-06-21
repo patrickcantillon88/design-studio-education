@@ -265,6 +265,46 @@ function getTestUser() {
       }
       chooseWelcomeMode('play');
     };
+    const showWelcome = (opts = {}) => {
+      if (!opts.skipRoomCleanup) {
+        try {
+          const worlds = window.__tinyworldWorlds;
+          if (worlds && typeof worlds.close === 'function') worlds.close();
+          if (worlds && typeof worlds.leaveRoom === 'function') worlds.leaveRoom();
+        } catch (_) {}
+      }
+      try {
+        if (window.__tinyworldMode && typeof window.__tinyworldMode.setBuild === 'function') window.__tinyworldMode.setBuild();
+      } catch (_) {}
+      setTinyverseLoading(false);
+      modal.hidden = false;
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('welcome-launch-open');
+      applyTinyverseAccessGate();
+      requestAnimationFrame(() => {
+        try { (tinyverseBtn || battleworldsBtn || buildBtn || playBtn).focus({ preventScroll: true }); } catch (_) {}
+      });
+    };
+    window.__tinyworldShowWelcomeLaunch = showWelcome;
+    if (tinyverseBtn) tinyverseBtn.addEventListener('click', openTinyverse);
+    if (battleworldsBtn) battleworldsBtn.addEventListener('click', openBattleworlds);
+    if (buildBtn) buildBtn.addEventListener('click', () => chooseWelcomeMode('build'));
+    if (playBtn) playBtn.addEventListener('click', () => chooseWelcomeMode('play'));
+
+    // One-button test login for preview (lockout testing)
+    if (isPreviewTest() && tinyverseBtn && tinyverseBtn.parentNode) {
+      const testWrap = document.createElement("div");
+      testWrap.style.cssText = "margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;justify-content:center";
+      testWrap.innerHTML = `
+        <button id="test-login-me" style="font-size:10px;padding:4px 8px;border:1px solid #4a6;border-radius:4px;background:#0a2;color:#0f0;cursor:pointer">Login as Me (admin)</button>
+        <button id="test-login-alt" style="font-size:10px;padding:4px 8px;border:1px solid #66a;border-radius:4px;background:#112;color:#8af;cursor:pointer">Login as Alt jason.kneen@gmail.com (user UX)</button>
+      `;
+      tinyverseBtn.parentNode.appendChild(testWrap);
+      const meBtn = testWrap.querySelector("#test-login-me");
+      const altBtn = testWrap.querySelector("#test-login-alt");
+      if (meBtn) meBtn.onclick = () => setTestUser("jason.kneen@bouncingfish.com", true);
+      if (altBtn) altBtn.onclick = () => setTestUser("jason.kneen@gmail.com", false);
+    }
 
     const skipWelcomeForMultiplayer = (() => {
       try {
@@ -290,32 +330,7 @@ function getTestUser() {
       chooseWelcomeMode(tinyverseSlug ? 'play' : 'build');
       return;
     }
-    modal.hidden = false;
-    modal.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('welcome-launch-open');
-    if (tinyverseBtn) tinyverseBtn.addEventListener('click', openTinyverse);
-    applyTinyverseAccessGate();   // reflect account lobby access on the Tinyverse button
-    if (battleworldsBtn) battleworldsBtn.addEventListener('click', openBattleworlds);
-    if (buildBtn) buildBtn.addEventListener('click', () => chooseWelcomeMode('build'));
-    if (playBtn) playBtn.addEventListener('click', () => chooseWelcomeMode('play'));
-    requestAnimationFrame(() => {
-      try { (tinyverseBtn || battleworldsBtn || buildBtn || playBtn).focus({ preventScroll: true }); } catch (_) {}
-    });
-
-    // One-button test login for preview (lockout testing)
-    if (isPreviewTest() && tinyverseBtn && tinyverseBtn.parentNode) {
-      const testWrap = document.createElement("div");
-      testWrap.style.cssText = "margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;justify-content:center";
-      testWrap.innerHTML = `
-        <button id="test-login-me" style="font-size:10px;padding:4px 8px;border:1px solid #4a6;border-radius:4px;background:#0a2;color:#0f0;cursor:pointer">Login as Me (admin)</button>
-        <button id="test-login-alt" style="font-size:10px;padding:4px 8px;border:1px solid #66a;border-radius:4px;background:#112;color:#8af;cursor:pointer">Login as Alt jason.kneen@gmail.com (user UX)</button>
-      `;
-      tinyverseBtn.parentNode.appendChild(testWrap);
-      const meBtn = testWrap.querySelector("#test-login-me");
-      const altBtn = testWrap.querySelector("#test-login-alt");
-      if (meBtn) meBtn.onclick = () => setTestUser("jason.kneen@bouncingfish.com", true);
-      if (altBtn) altBtn.onclick = () => setTestUser("jason.kneen@gmail.com", false);
-    }
+    showWelcome({ skipRoomCleanup: true });
   }
   // -------- cloud worlds / assets --------
   const TW_CLOUD_SLOT_PREFIX = 'cloud:';
@@ -1834,12 +1849,15 @@ function getTestUser() {
     twPerfMark('boot:start');
     appBooted = true;
     initWelcomeDialog();
-    // Top-right home button -> back to the marketing landing page (full nav to "/").
+    // Top-right home button -> in-app launch modal.
     try {
       const homeBtn = document.getElementById('landing-home-btn');
       if (homeBtn && !homeBtn.__wired) {
         homeBtn.__wired = true;
-        homeBtn.addEventListener('click', () => { window.location.href = '/'; });
+        homeBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          if (typeof window.__tinyworldShowWelcomeLaunch === 'function') window.__tinyworldShowWelcomeLaunch();
+        });
       }
     } catch (_) {}
     twPerfMark('boot:welcome-ready');
@@ -3060,7 +3078,9 @@ function getTestUser() {
       playModeActive = !!on;
       document.body.classList.toggle('tw-play-mode', playModeActive);
       syncBuildPlayButton();
-      try { localStorage.setItem(BUILD_PLAY_LS, playModeActive ? 'play' : 'build'); } catch (_) {}
+      if (opts.persist !== false) {
+        try { localStorage.setItem(BUILD_PLAY_LS, playModeActive ? 'play' : 'build'); } catch (_) {}
+      }
       if (playModeActive && !opts.skipEditorCleanup) {
         try {
           if (window.__tinyworldSubEdit && window.__tinyworldSubEdit.exit) window.__tinyworldSubEdit.exit();
@@ -3085,6 +3105,7 @@ function getTestUser() {
       isBuild: () => !playModeActive,
       setPlay: () => setPlayModeActive(true),
       setBuild: () => setPlayModeActive(false),
+      setPlayTemporary: () => setPlayModeActive(true, { persist: false }),
       toggle: () => setPlayModeActive(!playModeActive),
     };
     if (buildPlayBtn) buildPlayBtn.addEventListener('click', () => setPlayModeActive(!playModeActive));

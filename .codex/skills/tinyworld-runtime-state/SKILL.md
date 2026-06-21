@@ -185,10 +185,27 @@ defaults — sets the welcome shot for new users.
   builder state through `WS.restoreFreeform()`, and opens the picker overlay.
   Do not hide picker navigation inside minimap or teardown helpers; that has
   previously exposed legacy multi-gate selector boards.
-- Do not add physical world-selection stargates to island payloads or previews.
-  The `/api/worlds` normalization and the client universe overlay should strip
-  legacy stargate cells from island data before rendering/entering; the world
-  picker is UI chrome, not an island board.
+- Tinyverse room play mode is temporary. Use `__tinyworldMode.setPlayTemporary()`
+  when forcing multiplayer play chrome, do not persist that to
+  `tinyworld:build-play-mode.v1`, and make room exit restore Build so the toolbar
+  is not trapped hidden after refresh/exit.
+- In-app Home controls should reopen the reusable welcome/launch modal through
+  `window.__tinyworldShowWelcomeLaunch()` instead of navigating to `/` or
+  logging the user out. That launch modal is the canonical route back to
+  Tinyverse / Battleworlds / Build.
+- World-selection stargates are real in-island travel points again, but only as
+  one center gate per island. The `/api/worlds` normalization and the client
+  universe overlay should strip legacy multi-gate cells, replace any center
+  object with a single `{ kind: 'stargate', dest: '__world-picker' }`, and keep
+  the picker itself as UI chrome rather than a Nexus board.
+- Tinyverse world entry must use the real `/api/worlds` detail response and its
+  signed join token, including deploy-preview/test hosts. Do not create
+  tokenless client-only preview worlds for entry; a PartyKit world room with a
+  join secret will correctly downgrade those joins to observer.
+- PartyKit world-room walkability must be server-authoritative and solid by
+  default: only empty tiles, water, bridges, stargates, plants/animals, and low
+  ground cover are standable. Buildings, trees, rocks, fences, model stamps,
+  voxel builds, and unknown future object kinds must block movement.
 - `tinyworld:features:cluso` — legacy Cluso flag; no app runtime path reads this
   key. The Cluso embed is now injected local-dev-only by `tools/dev-server.js`
   (see tinyworld-single-file SKILL), not gated by this key.
